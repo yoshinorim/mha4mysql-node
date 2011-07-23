@@ -1,0 +1,252 @@
+#!/usr/bin/env perl
+
+#  Copyright (C) 2011 DeNA Co.,Ltd.
+#
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation; either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#   along with this program; if not, write to the Free Software
+#  Foundation, Inc.,
+#  51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+
+use strict;
+use warnings FATAL => 'all';
+
+use Carp qw(croak);
+use English qw(-no_match_vars);
+use Getopt::Long;
+use Pod::Usage;
+use File::Basename;
+use Sys::Hostname;
+use MHA::BinlogManager;
+use MHA::SlaveUtil;
+use MHA::NodeUtil;
+use MHA::NodeConst;
+use DBI;
+
+GetOptions(
+  \my %opt, qw/
+    help
+    version
+    workdir=s
+    relay_log_info=s
+    user=s
+    password=s
+    host=s
+    port=i
+    disable_relay_log_purge
+    /,
+) or pod2usage(1);
+$opt{workdir}  ||= "/var/tmp";
+$opt{user}     ||= "root";
+$opt{password} ||= "";
+$opt{host}     ||= "127.0.0.1";
+$opt{port}     ||= 3306;
+
+$| = 1;
+
+my $_binlog_manager;
+my $_relay_log_info_path = $opt{relay_log_info};
+
+if ( $opt{help} ) {
+  pod2usage(0);
+}
+
+if ( $opt{version} ) {
+  print "purge_relay_logs version $MHA::NodeConst::VERSION.\n";
+  exit 0;
+}
+
+exit &main();
+
+sub hardlink_relay_logs($) {
+  my $current_relay_log = shift;
+
+  my $relay_dir = $_binlog_manager->{dir};
+  my $archive_upto =
+    MHA::BinlogManager::get_prev_number_from_file($current_relay_log);
+
+  print(" Current relay log file: $relay_dir/$current_relay_log\n");
+  print(" Archiving unused relay log files "
+      . "(up to $relay_dir/$_binlog_manager->{prefix}.$archive_upto) ...\n" );
+
+  my @files =
+    MHA::BinlogManager::get_all_binlogs_from_prefix( $_binlog_manager->{prefix},
+    $relay_dir );
+  my $archived_num = 0;
+  foreach my $relay_log_basename (@files) {
+    my ( $a, $relay_log_number ) =
+      MHA::BinlogManager::get_head_and_number($relay_log_basename);
+    if ( $relay_log_number > $archive_upto ) {
+      last;
+    }
+    print(
+" Creating hard link for $relay_dir/$relay_log_basename under $opt{workdir}/$relay_log_basename .."
+    );
+    croak
+      if system(
+      "ln $relay_dir/$relay_log_basename  $opt{workdir}/$relay_log_basename");
+    print(" ok.\n");
+    $archived_num++;
+  }
+  if ( $archived_num == 0 ) {
+    print " Old relay logs not found. No need to archive right now.\n";
+    return 0;
+  }
+  print(" Creating hard links for unused relay log files completed.\n");
+  return 0;
+}
+
+sub remove_hardlinked_relay_logs() {
+  print(" Removing hard linked relay log files $_binlog_manager->{prefix}* "
+      . "under $opt{workdir}.." );
+  croak
+    if system(
+"find $opt{workdir} -maxdepth 1 -type f -name '$_binlog_manager->{prefix}*' | xargs rm -f"
+    );
+  print(" done.\n");
+}
+
+sub check_local {
+  return if ( $opt{host} eq "127.0.0.1" );
+  return if ( $opt{host} =~ m/localhost/ );
+  my $my_host = hostname();
+  return if ( $opt{host} eq $my_host );
+
+  my $target_addr     = MHA::NodeUtil::get_ip( $opt{host} );
+  my @ifconfig_result = `/sbin/ifconfig -a`;
+  my %addrs;
+  for (@ifconfig_result) {
+    if (/\s*inet addr:([\d.]+)/) {
+      $addrs{$1} = 1;
+    }
+  }
+  if ( !exists( $addrs{$target_addr} ) ) {
+    croak
+      "--host($opt{host}) must be local address (localhost, 127.0.0.1, etc)!\n";
+  }
+}
+
+sub save_error_log {
+  my $dbh = shift;
+  if (
+    !MHA::NodeUtil::mysql_version_ge(
+      MHA::SlaveUtil::get_version($dbh), "5.1.51"
+    )
+    )
+  {
+    my $log_error_path = MHA::SlaveUtil::get_log_error_file($dbh);
+    my $dir            = dirname($log_error_path);
+    my $file           = basename($log_error_path);
+    `cat "$dir/$file-old" >> "$dir/$file-saved"` if ( -f "$dir/$file-old" );
+  }
+}
+
+sub main {
+  my $exit_code = 1;
+  eval {
+    check_local();
+    my $start = MHA::NodeUtil::current_time();
+    print "$start: purge_relay_logs script started.\n";
+
+    $_binlog_manager = new MHA::BinlogManager();
+    my $dsn = "DBI:mysql:;host=$opt{host};port=$opt{port}";
+    my $dbh =
+      DBI->connect( $dsn, $opt{user}, $opt{password},
+      { PrintError => 0, RaiseError => 1 } );
+    croak " Failed to get DB Handle on $opt{host}!\n" unless ($dbh);
+    croak " Target mysql server is not defined as replication slave.\n"
+      if ( !MHA::SlaveUtil::is_slave($dbh) );
+    if ( MHA::SlaveUtil::is_relay_log_purge($dbh) ) {
+
+      if ( $opt{disable_relay_log_purge} ) {
+        print " relay_log_purge is enabled. Disabling..\n";
+        MHA::SlaveUtil::disable_relay_log_purge($dbh);
+      }
+      else {
+        print " relay_log_purge is enabled. Exit.\n";
+        exit 0;
+      }
+    }
+
+    my ( $relay_dir, $current_relay_log );
+    if ( MHA::SlaveUtil::get_relay_log_info_type($dbh) eq "TABLE" ) {
+      ( $relay_dir, $current_relay_log ) =
+        MHA::SlaveUtil::get_relay_dir_file_from_table($dbh);
+      if ( !$relay_dir || !$current_relay_log ) {
+        croak
+"Getting relay log directory or current relay logfile from replication table failed!\n";
+      }
+      $_binlog_manager->init_from_dir_file( $relay_dir, $current_relay_log );
+    }
+    else {
+      $_relay_log_info_path = MHA::SlaveUtil::get_relay_log_info_path($dbh)
+        unless ($_relay_log_info_path);
+      unless ($_relay_log_info_path) {
+        croak " Failed to get relay_log_info file path!\n";
+      }
+      if ( !-f $_relay_log_info_path ) {
+        croak " $_relay_log_info_path does NOT exist.\n";
+      }
+      else {
+        print " Found relay_log.info: $_relay_log_info_path\n";
+      }
+
+      $_binlog_manager->init_from_relay_log_info($_relay_log_info_path);
+      $current_relay_log = $_binlog_manager->{cur_log};
+    }
+
+    remove_hardlinked_relay_logs();
+
+    croak if ( hardlink_relay_logs($current_relay_log) );
+
+    if ( MHA::SlaveUtil::get_failover_advisory_lock( $dbh, 200 ) ) {
+      croak
+        " Getting advisory lock failed. Maybe failover script is running?\n";
+    }
+    save_error_log($dbh);
+    print
+" Executing SET GLOBAL relay_log_purge=1; FLUSH LOGS; sleeping a few seconds so that SQL thread can delete older relay log files (if it keeps up); SET GLOBAL relay_log_purge=0; ..";
+    MHA::SlaveUtil::purge_relay_logs($dbh);
+    print " ok.\n";
+
+    MHA::SlaveUtil::release_failover_advisory_lock($dbh);
+    remove_hardlinked_relay_logs();
+    my $end = MHA::NodeUtil::current_time();
+    printf("$end: All relay log purging operations succeeded.\n");
+    $exit_code = 0;
+  };
+  if ($@) {
+    warn $@;
+  }
+  return $exit_code;
+}
+
+# ############################################################################
+# Documentation
+# ############################################################################
+
+=pod
+
+=head1 NAME
+
+purge_relay_logs - Deleting relay logs without blocking SQL threads
+
+=head1 SYNOPSIS
+
+purge_relay_logs --user=root --password=rootpass --host=127.0.0.1
+
+See online reference (http://code.google.com/p/mysql-master-ha/wiki/Requirements#purge_relay_logs_script) for details.
+
+=head1 DESCRIPTION
+
+See online reference (http://code.google.com/p/mysql-master-ha/wiki/Requirements#purge_relay_logs_script) for details.
+

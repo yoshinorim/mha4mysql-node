@@ -1,0 +1,483 @@
+#!/usr/bin/env perl
+
+#  Copyright (C) 2011 DeNA Co.,Ltd.
+#
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation; either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#   along with this program; if not, write to the Free Software
+#  Foundation, Inc.,
+#  51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+
+use strict;
+use warnings FATAL => 'all';
+
+use Carp qw(croak);
+use MHA::BinlogManager;
+use MHA::BinlogPosFindManager;
+use MHA::BinlogPosFinder;
+use MHA::BinlogPosFinderXid;
+use MHA::BinlogPosFinderElp;
+use MHA::NodeConst;
+use MHA::NodeUtil;
+use Getopt::Long;
+use Pod::Usage;
+use File::Basename;
+use File::Copy;
+use Sys::Hostname;
+
+GetOptions(
+  \my %opt, qw/
+    help
+    version
+    command=s
+    relay_log_info=s
+    relay_dir=s
+    current_relay_log=s
+    scp_user=s
+    scp_host=s
+    slave_user=s
+    slave_pass=s
+    slave_host=s
+    slave_ip=s
+    slave_port=i
+    master_server_id=i
+    server_id=i
+    latest_mlf=s
+    latest_rmlp=i
+    target_mlf=s
+    target_rmlp=i
+    target_version=s
+    workdir=s
+    diff_file_readtolatest=s
+    apply_files=s
+    timestamp=s
+    handle_raw_binlog=i
+    disable_log_bin=i
+    no_apply
+    manager_version=s
+    debug
+    /,
+) or pod2usage(1);
+$opt{command}    ||= "";
+$opt{scp_user}   ||= "root";
+$opt{slave_user} ||= "root";
+$opt{slave_pass} ||= "";
+
+# for printing and authentication
+$opt{slave_host}  ||= "127.0.0.1";
+$opt{slave_port}  ||= 3306;
+$opt{target_rmlp} ||= 0;
+$opt{workdir}     ||= "/var/tmp";
+$opt{timestamp}   ||= "0";
+$opt{handle_raw_binlog} = 1 if ( !defined( $opt{handle_raw_binlog} ) );
+$opt{disable_log_bin}   = 0 if ( !defined( $opt{disable_log_bin} ) );
+
+my $_binlog_manager;
+my $_find_logname_only = 0;
+
+$| = 1;
+
+if ( $opt{help} ) {
+  pod2usage(0);
+}
+if ( $opt{version} ) {
+  print "apply_diff_relay_logs version $MHA::NodeConst::VERSION.\n";
+  exit 0;
+}
+
+exit &main();
+
+sub fast_find_pos() {
+  my %status = ();
+  if ( $opt{target_mlf} eq $opt{latest_mlf} ) {
+    my $offset    = $opt{latest_rmlp} - $opt{target_rmlp};
+    my $filesize  = -s "$_binlog_manager->{dir}/$_binlog_manager->{end_log}";
+    my $start_rlp = $filesize - $offset;
+    return if ( $start_rlp <= 0 );
+
+    # Checking binlog is readable from this position
+    unless (
+      system(
+"mysqlbinlog --start-position=$start_rlp --stop-position=$start_rlp $_binlog_manager->{dir}/$_binlog_manager->{end_log} > /dev/null"
+      )
+      )
+    {
+      $status{status}    = 0;
+      $status{start_rlf} = $_binlog_manager->{end_log};
+      $status{start_rlp} = $start_rlp;
+      return %status;
+    }
+  }
+  else {
+    return;
+  }
+  return;
+}
+
+sub generate_diff_relay_log($$$) {
+  my $start_relay_log = shift;
+  my $start_relay_pos = shift;
+  my $out             = shift;
+  return $_binlog_manager->concat_all_binlogs_from( $start_relay_log,
+    $start_relay_pos, $out );
+}
+
+sub find_starting_relay_log {
+  my %start;
+  unless ( $opt{latest_mlf} ) {
+    croak "--latest_mlf (my latest master log file name) must be set.\n";
+  }
+  unless ( $opt{target_mlf} ) {
+    croak "--target_mlf (target master log file name) must be set.\n";
+  }
+  unless ( $opt{target_rmlp} ) {
+    croak "--target_rmlp (target master read log pos) must be set.\n";
+  }
+  unless ( $opt{latest_rmlp} ) {
+    croak "--latest_rmlp (latest master read log pos) must be set.\n";
+  }
+  unless ( $opt{server_id} ) {
+    croak "--server_id (my server id) must be set.\n";
+  }
+
+  if ( %start = fast_find_pos() ) {
+    print " Fast relay log position search succeeded.\n";
+  }
+  else {
+    print
+      " Fast relay log position search failed. Reading relay logs to find..\n";
+    %start = new MHA::BinlogPosFindManager(
+      binlog_manager    => $_binlog_manager,
+      server_id         => $opt{server_id},
+      target_mlf        => $opt{target_mlf},
+      target_rmlp       => $opt{target_rmlp},
+      find_logname_only => $_find_logname_only,
+      debug             => $opt{debug},
+      )->find_target_relay_log( $_binlog_manager->{end_log},
+      $opt{latest_mlf}, 0 );
+
+    if ( !defined( $start{status} ) ) {
+      $start{status} = $MHA::NodeConst::Relay_Log_Not_Found;
+      return %start;
+    }
+    return %start if ( $start{status} != 0 || $_find_logname_only );
+
+    if ( !$start{start_rlf} || !defined( $start{start_rlp} ) ) {
+      print "FATAL: getting start relay file and/or position failed.\n";
+      $start{status} = $MHA::NodeConst::Relay_Log_Not_Found;
+      return %start;
+    }
+  }
+  print
+" Target relay log file/position found. start_file:$start{start_rlf}, start_pos:$start{start_rlp}.\n";
+
+  return %start;
+}
+
+sub do_generate($$$) {
+  my $start_relay_log = shift;
+  my $start_relay_pos = shift;
+  my $out             = shift;
+
+  my $rc = generate_diff_relay_log( $start_relay_log, $start_relay_pos, $out );
+  print " Generating diff relay log succeeded. Saved at $out .\n"
+    if ( $rc == 0 );
+  return $rc;
+}
+
+sub apply_diff($$) {
+  my $apply_files = shift;
+  my $err_file    = shift;
+  my $command     = "";
+
+  my @diffs = split( /,/, $apply_files );
+  if ( $#diffs < 0 ) {
+    croak "ERROR: --apply_files must be set.\n";
+  }
+  foreach my $file (@diffs) {
+    if ( !-f $file ) {
+      croak "ERROR: $file not found!\n";
+    }
+  }
+
+  if ( $opt{handle_raw_binlog} ) {
+    if ( $#diffs == 0 ) {
+      $command = "mysqlbinlog $apply_files ";
+    }
+    else {
+      my $out =
+"$opt{workdir}/total_binlog_for_$opt{slave_host}_$opt{slave_port}.$opt{timestamp}.binlog";
+      MHA::NodeUtil::drop_file_if($out);
+      $_binlog_manager->concat_generated_binlogs( \@diffs, $out );
+      print "All apply target binary logs are concatinated at $out .\n";
+      $command = "mysqlbinlog $out ";
+    }
+    $command .= $_binlog_manager->get_apply_arg();
+  }
+  else {
+    $command = "cat ";
+    foreach my $file (@diffs) {
+      $command .= "$file ";
+    }
+  }
+  return 0 if ( $opt{no_apply} );
+
+  $command .=
+" | mysql --user=$opt{slave_user} --password=$opt{slave_pass} --host=$opt{slave_ip} --port=$opt{slave_port} -vvv --unbuffered > $err_file 2>&1";
+
+  # applying relay log
+  print
+"Applying differential binary/relay log files $apply_files on $opt{slave_host}:$opt{slave_port}. This may take long time...\n";
+
+  # applying log failed
+  if ( my $rc = system($command) ) {
+    my ( $high, $low ) = MHA::NodeUtil::system_rc($rc);
+    print "FATAL: applying log files failed with rc $high:$low!\n";
+    printf( "Error logs from %s:%s (the last 200 lines)..\n",
+      hostname(), $err_file );
+    system("tail -200 $err_file");
+    return $MHA::NodeConst::Applying_SQL_File_Failed;
+  }
+  return 0;
+}
+
+sub apply {
+  unless ( $opt{apply_files} ) {
+    croak "ERROR: --apply_files must be set.\n";
+  }
+  my $date = $opt{timestamp};
+  unless ( $opt{timestamp} ) {
+    my ( $year, $mon, @time ) = reverse( (localtime)[ 0 .. 5 ] );
+    $date = sprintf '%04d%02d%02d%02d%02d%02d', $year + 1900, $mon + 1, @time;
+  }
+  return apply_diff( $opt{apply_files},
+    "$opt{workdir}/relay_log_apply_for_$opt{slave_host}_$opt{slave_port}_$date"
+      . "_err.log" );
+}
+
+sub check_set_relay_dir_endlog {
+  if ( $opt{relay_dir} && $opt{current_relay_log} ) {
+    $_binlog_manager->init_from_dir_file( $opt{relay_dir},
+      $opt{current_relay_log} );
+  }
+  elsif ( $opt{relay_log_info} ) {
+    print "    Opening $opt{relay_log_info} ...";
+    $_binlog_manager->init_from_relay_log_info( $opt{relay_log_info} );
+    print " ok.\n";
+  }
+  else {
+    croak
+"ERROR: Either (--relay_dir=s, --current_relay_log=s) or (--relay_log_info=s) must be set.\n";
+  }
+
+  print
+"    Relay log found at $_binlog_manager->{dir}, up to $_binlog_manager->{end_log}\n";
+}
+
+sub check_slave_host() {
+  croak "--slave_host must be set.\n" unless ( $opt{slave_host} );
+  unless ( $opt{slave_ip} ) {
+    $opt{slave_ip} = MHA::NodeUtil::get_ip( $opt{slave_host} );
+  }
+}
+
+sub check() {
+  my $rc;
+  print "  Checking slave recovery environment settings..\n";
+
+  if ( $rc = system("echo 100 | md5sum > /dev/null") ) {
+    my ( $high, $low ) = MHA::NodeUtil::system_rc($rc);
+    croak "md5sum failed with rc $high:$low!\n";
+  }
+
+  check_set_relay_dir_endlog();
+  print
+"    Temporary relay log file is $_binlog_manager->{dir}/$_binlog_manager->{end_log}\n";
+  print "    Testing mysql connection and privileges..";
+  check_slave_host();
+
+  if (
+    $rc = system(
+"mysql --user=$opt{slave_user} --password=$opt{slave_pass} --host=$opt{slave_ip} --port=$opt{slave_port} -e \"set sql_log_bin=0; create table if not exists mysql.apply_diff_relay_logs_test(id int); insert into mysql.apply_diff_relay_logs_test values(1); update mysql.apply_diff_relay_logs_test set id=id+1 where id=1; delete from mysql.apply_diff_relay_logs_test; drop table mysql.apply_diff_relay_logs_test;\""
+    )
+    )
+  {
+    my ( $high, $low ) = MHA::NodeUtil::system_rc($rc);
+    croak "mysql command failed with rc $high:$low!\n";
+  }
+  print " done.\n";
+  print "    Testing mysqlbinlog output..";
+  my $workfile = "$opt{workdir}/slavediff_tmp_$opt{slave_host}.log";
+
+  if (
+    $rc = system(
+"mysqlbinlog $_binlog_manager->{dir}/$_binlog_manager->{end_log} --start-position=4 --stop-position=4 > $workfile"
+    )
+    )
+  {
+    my ( $high, $low ) = MHA::NodeUtil::system_rc($rc);
+    croak "mysqlbinlog failed with rc $high:$low!\n";
+  }
+  print " done.\n";
+  print "    Cleaning up test file(s)..";
+  MHA::NodeUtil::drop_file_if($workfile);
+  print " done.\n";
+
+  if ( !$opt{scp_user} || !$opt{scp_host} ) {
+    return 0;
+  }
+  print "    Testing connecting to remote slave $opt{scp_host} via ssh..";
+  my $ssh_user_host = $opt{scp_user} . '@' . $opt{scp_host};
+  if ( $rc =
+    system("ssh $MHA::NodeConst::SSH_OPT_ALIVE $ssh_user_host \"exit 0 \"") )
+  {
+    my ( $high, $low ) = MHA::NodeUtil::system_rc($rc);
+    croak "ssh failed with rc $high:$low!\n";
+  }
+  print " done.\n\n";
+  return 0;
+}
+
+sub generate_and_send {
+  if ( $opt{command} eq "generate_and_send" ) {
+    if ( !$opt{scp_user} || !$opt{scp_host} ) {
+      croak "ERROR: --scp_user and --scp_host must be set.\n";
+    }
+  }
+  unless ( $opt{diff_file_readtolatest} ) {
+    croak "ERROR: --diff_file_readtolatest=<Diff file name> must be set.\n";
+  }
+  my $gen_file_dir = dirname( $opt{diff_file_readtolatest} );
+  MHA::NodeUtil::create_dir_if($gen_file_dir);
+  MHA::NodeUtil::drop_file_if( $opt{diff_file_readtolatest} );
+
+  check_set_relay_dir_endlog();
+  my %status = find_starting_relay_log();
+  if ( $status{status} == $MHA::NodeConst::Target_Has_Received_All_Relay_Logs )
+  {
+    print "Target slave has received all relay logs.\n";
+    return 0;
+  }
+  croak if ( $status{status} != 0 || !$status{start_rlf} );
+
+  my $rc =
+    do_generate( $status{start_rlf}, $status{start_rlp},
+    $opt{diff_file_readtolatest} );
+  return $rc if ( $rc || $opt{command} eq "generate" );
+
+  my $scp_user_host = $opt{scp_user} . '@' . $opt{scp_host};
+  if (
+    $rc = system(
+"ssh $MHA::NodeConst::SSH_OPT_ALIVE $scp_user_host \"mkdir -p $gen_file_dir\""
+    )
+    )
+  {
+    my ( $high, $low ) = MHA::NodeUtil::system_rc($rc);
+    croak
+      "ssh $scp_user_host for mkdir $gen_file_dir failed with rc $high:$low!\n";
+  }
+  if (
+    MHA::NodeUtil::file_copy(
+      1,                            $opt{diff_file_readtolatest},
+      $opt{diff_file_readtolatest}, $opt{scp_user},
+      $opt{scp_host}
+    )
+    )
+  {
+    croak "ERROR: scp %s:%s to %s failed!\n", hostname(),
+      $opt{diff_file_readtolatest}, $scp_user_host;
+  }
+  else {
+    printf " scp %s:%s to %s succeeded.\n", hostname(),
+      $opt{diff_file_readtolatest}, $scp_user_host;
+  }
+  return 0;
+
+}
+
+sub main() {
+  my $exit_code = 1;
+  eval {
+    MHA::NodeUtil::check_manager_version( $opt{manager_version} )
+      if ( $opt{manager_version} );
+
+    $_binlog_manager = new MHA::BinlogManager(
+      handle_raw_binlog => $opt{handle_raw_binlog},
+      disable_log_bin   => $opt{disable_log_bin},
+      mysql_version     => $opt{target_version},
+      debug             => $opt{debug},
+    );
+    if (!$opt{handle_raw_binlog}
+      || $opt{command} eq "test"
+      || $opt{command} eq "apply" )
+    {
+      croak "--target_version=<mysql_version> must be set.\n"
+        unless ( $opt{target_version} );
+      $_binlog_manager->init_mysqlbinlog();
+    }
+    MHA::NodeUtil::create_dir_if( $opt{workdir} );
+
+    if ( $opt{command} eq "test" ) {
+      croak if ( check() );
+    }
+    elsif ( $opt{command} eq "generate_and_send"
+      || $opt{command} eq "generate" )
+    {
+      croak if ( generate_and_send() );
+    }
+    elsif ( $opt{command} eq "find" ) {
+      $_find_logname_only = 1;
+      check_set_relay_dir_endlog();
+      my %status = find_starting_relay_log();
+      croak if ( $status{status} != 0 || !$status{start_rlf} );
+      print "Target relay log FOUND!\n";
+    }
+    elsif ( $opt{command} eq "apply" ) {
+      check_slave_host();
+      $exit_code = apply();
+      croak if ($exit_code);
+      print "Applying log files succeeded.\n";
+    }
+    else {
+      croak
+"Invalid command $opt{command}. Either [test|find|generate|generate_and_send|apply] command must be set.\n";
+    }
+    $exit_code = 0;
+  };
+  if ($@) {
+    warn $@;
+  }
+  return $exit_code;
+}
+
+# ############################################################################
+# Documentation
+# ############################################################################
+
+=pod
+
+=head1 NAME
+
+apply_diff_relay_logs - Generating differential relay logs between the latest slave and target slave, and applying all binlog/relay log files. This command is automatically executed from MHA Manager on failover, and manual execution should not be needed normally.
+
+=head1 SYNOPSIS
+
+# For checking 
+apply_diff_relay_logs --command=test --target_version=5.1.56 --relay_log_info=s --slave_user=s --slave_host=s --slave_ip=s --slave_port=i --workdir=s
+
+# For generating differential log events
+apply_diff_relay_logs --command=generate_and_send --target_version=5.1.56 --scp_user=s --scp_host=s --latest_mlf=s --target_mlf=s --target_rmlp=i --relay_log_info=s --server_id=i --diff_file_readtolatest=s --target_version=s --workdir=s --timestamp=s
+
+# For applying log files
+apply_diff_relay_logs --command=apply --target_version=5.1.56 --slave_user=s --slave_host=s --slave_ip=s  --slave_port=i --apply_files=file1,file2.. --workdir=s --timestamp=s --slave_pass=xxx
+
+

@@ -1,0 +1,209 @@
+#!/usr/bin/env perl
+
+#  Copyright (C) 2011 DeNA Co.,Ltd.
+#
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation; either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#   along with this program; if not, write to the Free Software
+#  Foundation, Inc.,
+#  51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+
+use strict;
+use warnings FATAL => 'all';
+
+use Carp qw(croak);
+use MHA::BinlogManager;
+use MHA::NodeConst;
+use MHA::NodeUtil;
+use File::Basename;
+use Getopt::Long;
+use Pod::Usage;
+
+GetOptions(
+  \my %opt, qw/
+    help
+    version
+    command=s
+    start_file=s
+    start_pos=i
+    binlog_dir=s
+    output_file=s
+    relay_log_info=s
+    oldest_version=s
+    handle_raw_binlog=i
+    disable_log_bin=i
+    manager_version=s
+    debug
+    /,
+) or pod2usage(1);
+$opt{binlog_dir} ||= "/var/lib/mysql";
+$opt{handle_raw_binlog} = 1 if ( !defined( $opt{handle_raw_binlog} ) );
+$opt{disable_log_bin}   = 0 if ( !defined( $opt{disable_log_bin} ) );
+
+$| = 1;
+my $_binlog_manager;
+my $EVENT_NOT_EXIST = 10;
+exit &main();
+
+sub main {
+  my $exit_code = 1;
+  eval {
+    if ( $opt{help} )
+    {
+      pod2usage(0);
+    }
+    if ( $opt{version} ) {
+      print "save_binary_logs version $MHA::NodeConst::VERSION.\n";
+      exit 0;
+    }
+    MHA::NodeUtil::check_manager_version( $opt{manager_version} )
+      if ( $opt{manager_version} );
+    unless ( $opt{command} ) {
+      croak "Set --command=[test|save]\n";
+    }
+    unless ( $opt{start_file} ) {
+      croak "Set --start_file=<starting_binlog_filename>\n";
+    }
+    if ( !defined( $opt{start_pos} ) ) {
+      croak "Set --start_pos=<starting_binlog_pos>\n";
+    }
+    $_binlog_manager = new MHA::BinlogManager(
+      handle_raw_binlog => $opt{handle_raw_binlog},
+      disable_log_bin   => $opt{disable_log_bin},
+      mysql_version     => $opt{oldest_version},
+      debug             => $opt{debug},
+    );
+    $_binlog_manager->init_mysqlbinlog() unless ( $opt{handle_raw_binlog} );
+
+    # Finding target binary/relay log directory
+    if ( $opt{relay_log_info} ) {
+      $_binlog_manager->init_from_relay_log_info( $opt{relay_log_info} );
+    }
+    else {
+      my $binlog_dir =
+        MHA::BinlogManager::find_correct_binlog_dir( $opt{start_file},
+        $opt{binlog_dir} );
+      croak "Binlog not found from $opt{binlog_dir}!\n" unless ($binlog_dir);
+      $_binlog_manager->init_from_dir_file( $binlog_dir, $opt{start_file} );
+    }
+
+    unless ( $opt{output_file} ) {
+      croak "Set --output_file=<output_file_path>\n";
+    }
+    printf( "  Creating %s if not exists.. ", dirname( $opt{output_file} ) );
+    MHA::NodeUtil::create_dir_if( dirname( $opt{output_file} ) );
+    print "   ok.\n";
+
+    if ( $opt{command} eq "test" ) {
+      print "  Checking output directory is accessible or not..\n";
+      my $fh;
+      open( $fh, ">$opt{output_file}" ) or croak "$!:$opt{output_file}\n";
+      unlink $opt{output_file};
+      print "   ok.\n";
+      print
+"  Binlog found at $_binlog_manager->{dir}, up to $_binlog_manager->{end_log}\n";
+      exit 0;
+    }
+    elsif ( $opt{command} eq "save" ) {
+      my $rc = generate_diff_binary_log();
+      if ( $rc == $EVENT_NOT_EXIST ) {
+        print "Event not exists.\n";
+        exit $rc;
+      }
+      elsif ($rc) {
+        croak "Failed!\n";
+      }
+      else {
+        exit 0;
+      }
+    }
+    else {
+      pod2usage(1);
+    }
+    $exit_code = 0;
+  };
+  if ($@) {
+    warn "Failed to save binary log: $@";
+  }
+  return $exit_code;
+}
+
+sub generate_diff_binary_log() {
+  my $start_binlog_file = $opt{start_file};
+  my $start_binlog_pos  = $opt{start_pos};
+  my $out_diff_file     = $opt{output_file};
+
+  MHA::NodeUtil::drop_file_if($out_diff_file);
+
+  if (
+    $_binlog_manager->concat_all_binlogs_from(
+      $start_binlog_file, $start_binlog_pos, $out_diff_file
+    )
+    )
+  {
+    return $EVENT_NOT_EXIST;
+  }
+  return 0;
+}
+
+# ############################################################################
+# Documentation
+# ############################################################################
+
+=pod
+
+=head1 NAME
+
+save_binary_logs - Concatenating binary or relay logs from the specified 
+file/position to the end of the log. This command is automatically executed from MHA Manager on failover, and manual execution should not be needed normally.
+
+=head1 SYNOPSIS
+
+# Test
+
+$ save_binary_logs --command=test  --binlog_dir=/var/lib/mysql --start_file=mysqld-bin.000002
+
+# Saving binary logs
+
+$ save_binary_logs --command=save --binlog_dir=/var/lib/mysql --start_file=mysqld-bin.000002 --start_pos=312  --output_file=/var/tmp/aggregate.binlog
+
+# Saving relay logs
+
+$ save_binary_logs --command=save --start_file=mysqld-relay-bin.000002 --start_pos=312 --relay_log_info=/var/lib/mysql/relay-log.info --output_file=/var/tmp/aggregate.binlog
+
+save_binary_logs concatenates binary or relay logs from the specified log 
+file/position to the end of the log. This tool is intended to 
+be invoked from the master failover script(MHA Manager), and 
+manual execution is normally not needed.
+
+
+=head1 DESCRIPTION
+
+Suppose that master is crashed and the latest slave server has received 
+binary logs up to mysqld-bin.000002:312. It is likely that master has 
+more binary logs. If it is not sent to the slave, slaves will lose all 
+binlogs from mysqld-bin.000002:312. The purpose of the save_binary_logs is 
+to save binary logs that are not replicated to slaves. If master is reachable 
+through SSH and binary logs are readable, saving binary logs is possible.
+
+Here is an example:
+
+$ save_binary_logs --command=save --start_file=mysqld-bin.000002 --start_pos=312 --output_file=/var/tmp/aggregate.binlog
+
+Then all binary logs starting from mysqld-bin.000002:312 are concatenated
+and stored into /var/tmp/aggregate.binlog. If you have binary logs
+up to mysqld-bin.000004, the following mysqlbinlog outputs are written.
+
+mysqld-bin.000002:Format Description Event(FDE), plus from 312 to the tail
+mysqld-bin.000003:from 0 to the tail, excluding FDE
+mysqld-bin.000004:from 0 to the tail, excluding FDE
+
