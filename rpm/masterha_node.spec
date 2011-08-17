@@ -1,6 +1,6 @@
 Summary: MySQL-MasterHA-Node Perl module
 Name: MySQL-MasterHA-Node
-Version: 0.50
+Version: 0.51
 Release: 0
 License: GPL v2
 Vendor: DeNA Co.,Ltd.
@@ -11,7 +11,6 @@ BuildArch: noarch
 BuildRequires: perl(ExtUtils::MakeMaker) >= 6.42
 Requires: perl(DBD::mysql)
 Requires: perl(DBI)
-Requires: perl(:MODULE_COMPAT_%(eval "`%{__perl} -V:version`"; echo $version))
 Source0: MySQL-MasterHA-Node-%{version}.tar.gz
 
 %description
