@@ -1,7 +1,7 @@
 Summary: MySQL-MasterHA-Node Perl module
 Name: MySQL-MasterHA-Node
 Version: 0.51
-Release: 0
+Release: 0.%{?dist}
 License: GPL v2
 Vendor: DeNA Co.,Ltd.
 Group: Utilities
@@ -20,7 +20,7 @@ Source0: MySQL-MasterHA-Node-%{version}.tar.gz
 %setup -q -n MySQL-MasterHA-Node-%{version}
 
 %build
-CFLAGS="$RPM_OPT_FLAGS" %{__perl} Makefile.PL
+CFLAGS="$RPM_OPT_FLAGS" %{__perl} Makefile.PL INSTALLDIRS="vendor" %{?perl_install_vendor_lib}
 make %{?_smp_mflags} OPTIMIZE="$RPM_OPT_FLAGS"
 
 %install
@@ -39,19 +39,9 @@ do
   [ -x $brp ] && $brp && break
 done
 
-
 find $RPM_BUILD_ROOT -type f \
 | sed "s@^$RPM_BUILD_ROOT@@g" \
 > %{name}-%{version}-%{release}-filelist
-
-eval `%{__perl} -V:archname -V:installsitelib -V:installvendorlib -V:installprivlib`
-for d in $installsitelib $installvendorlib $installprivlib; do
-  [ -z "$d" -o "$d" = "UNKNOWN" -o ! -d "$RPM_BUILD_ROOT$d" ] && continue
-  find $RPM_BUILD_ROOT$d/* -type d \
-  | grep -v "/$archname\(/auto\)\?$" \
-  | sed "s@^$RPM_BUILD_ROOT@%dir @g" \
-  >> %{name}-%{version}-%{release}-filelist
-done
 
 if [ "$(cat %{name}-%{version}-%{release}-filelist)X" = "X" ] ; then
     echo "ERROR: EMPTY FILE LIST"
