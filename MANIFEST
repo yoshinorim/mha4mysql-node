@@ -4,6 +4,11 @@ bin/filter_mysqlbinlog
 bin/purge_relay_logs
 bin/save_binary_logs
 COPYING
+debian/changelog
+debian/compat
+debian/control
+debian/copyright
+debian/rules
 inc/Module/AutoInstall.pm
 inc/Module/Install.pm
 inc/Module/Install/AutoInstall.pm
