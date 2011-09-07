@@ -1,7 +1,7 @@
 Summary: MySQL-MasterHA-Node Perl module
 Name: MySQL-MasterHA-Node
 Version: 0.51
-Release: 0.%{?dist}
+Release: 0
 License: GPL v2
 Vendor: DeNA Co.,Ltd.
 Group: Utilities
@@ -20,7 +20,7 @@ Source0: MySQL-MasterHA-Node-%{version}.tar.gz
 %setup -q -n MySQL-MasterHA-Node-%{version}
 
 %build
-CFLAGS="$RPM_OPT_FLAGS" %{__perl} Makefile.PL INSTALLDIRS="vendor" %{?perl_install_vendor_lib}
+CFLAGS="$RPM_OPT_FLAGS" %{__perl} Makefile.PL INSTALLDIRS="vendor" INSTALLVENDORLIB=/usr/lib/perl5/vendor_perl
 make %{?_smp_mflags} OPTIMIZE="$RPM_OPT_FLAGS"
 
 %install
