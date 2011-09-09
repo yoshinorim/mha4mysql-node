@@ -61,7 +61,7 @@ sub open_binlog($) {
   my $self = shift;
   croak "binlog dir must be set.\n"  unless ( $self->{dir} );
   croak "binlog file must be set.\n" unless ( $self->{file} );
-  open( $self->{fp}, "< $self->{dir}/$self->{file}" )
+  open( $self->{fp}, "<", "$self->{dir}/$self->{file}" )
     or croak "$!:$self->{dir}/$self->{file}";
   binmode $self->{fp};
   $self->{binlog_size} = -s "$self->{dir}/$self->{file}";
@@ -223,7 +223,7 @@ sub parse_init_headers {
 "dumping rotate event from $self->{prev_pos} to $self->{current_pos}.\n"
           if ( $self->{debug} );
         my $buf;
-        open( my $out, ">>$outfile" ) or croak "$!:$outfile";
+        open( my $out, ">>", $outfile ) or croak "$!:$outfile";
         binmode $out;
         seek( $self->{fp}, $self->{prev_pos}, 0 );
         read( $self->{fp}, $buf, $self->{current_pos} - $self->{prev_pos} );

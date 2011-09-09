@@ -127,7 +127,7 @@ sub system_rc($) {
 sub create_file_if {
   my $file = shift;
   if ( $file && ( !-f $file ) ) {
-    open( my $out, "> $file" ) or croak "$!:$file";
+    open( my $out, ">", $file ) or croak "$!:$file";
     close($out);
   }
 }

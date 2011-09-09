@@ -130,7 +130,7 @@ sub init_mysqlbinlog($) {
 sub open_test($) {
   my $file = shift;
   my $fh;
-  open( $fh, "<$file" ) or croak "$!:$file\n";
+  open( $fh, "<", $file ) or croak "$!:$file\n";
   close($fh);
 }
 
@@ -187,16 +187,17 @@ sub mysqlbinlog_ge_50 {
 # Return: "/var/lib/mysql" "mysqld-relay-bin.000040"
 sub get_relaydir_and_filename_from_rinfo($) {
   my $relay_log_info_path = shift;
-  if ( !open( FH, "< $relay_log_info_path" ) ) {
+  my $fh;
+  if ( !open( $fh, "<", $relay_log_info_path ) ) {
     croak "Could not open relay-log-info file $relay_log_info_path.\n";
   }
 
-  my $current_relay_log_file = <FH>;
+  my $current_relay_log_file = readline($fh);
   chomp($current_relay_log_file);
 
   # for 5.6 relay-log.info
   if ( $current_relay_log_file =~ /^[0-9]+$/ ) {
-    $current_relay_log_file = <FH>;
+    $current_relay_log_file = readline($fh);
     chomp($current_relay_log_file);
   }
   my $relay_dir = dirname($current_relay_log_file);
@@ -387,12 +388,12 @@ sub dump_binlog_header_fde($$$$) {
   my $fp;
   my $buf;
   my $out;
-  open( $fp, $file ) or croak "$!:$file";
+  open( $fp, "<", $file ) or croak "$!:$file";
   binmode $fp;
   seek( $fp, 0, 0 );
   read( $fp, $buf, $end_fde_pos );
 
-  open( $out, ">$outfile" ) or croak "$!:$outfile";
+  open( $out, ">", $outfile ) or croak "$!:$outfile";
   binmode $out;
   print $out $buf;
   close($fp);
@@ -432,12 +433,12 @@ sub dump_binlog_from_pos($$$$$) {
 "  Dumping effective binlog data from $file position $from_pos to tail($size)..";
   }
 
-  open( $fp, $file ) or croak "$!:$file";
+  open( $fp, "<", $file ) or croak "$!:$file";
   binmode $fp;
   check_first_header_readable( $fp, $size, $from_pos );
   seek( $fp, $from_pos, 0 );
   read( $fp, $buf, $size - $from_pos );
-  open( $out, ">>$outfile" ) or croak "$!:$outfile";
+  open( $out, ">>", $outfile ) or croak "$!:$outfile";
   binmode $out;
   print $out $buf;
   close($fp);

@@ -17,6 +17,9 @@
 #  Foundation, Inc.,
 #  51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
+use strict;
+use warnings FATAL => 'all';
+
 package MHA::NodeConst;
 
 our $VERSION         = '0.51';

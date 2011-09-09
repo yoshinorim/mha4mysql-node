@@ -35,3 +35,5 @@ MANIFEST			This list of files
 META.yml
 README
 rpm/masterha_node.spec
+t/99-perlcritic.t
+t/perlcriticrc

@@ -106,7 +106,7 @@ sub main {
     if ( $opt{command} eq "test" ) {
       print "  Checking output directory is accessible or not..\n";
       my $fh;
-      open( $fh, ">$opt{output_file}" ) or croak "$!:$opt{output_file}\n";
+      open( $fh, ">", $opt{output_file} ) or croak "$!:$opt{output_file}\n";
       unlink $opt{output_file};
       print "   ok.\n";
       print
