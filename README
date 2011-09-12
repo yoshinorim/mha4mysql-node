@@ -1,1 +1,1 @@
-MySQL-MasterHA-Node - MySQL Master High Availability manager and tools (MHA) for automating master failover and fast master switch. This package contains utility scripts running on a MySQL server machine. See http://code.google.com/p/mysql-master-ha/wiki/TableOfContents?tm=6 for details.
+mha4mysql-node - Master High Availability Manager and tools for MySQL (MHA) for automating master failover and fast master switch. This package contains utility scripts running on a MySQL server machine. See http://code.google.com/p/mysql-master-ha/wiki/TableOfContents?tm=6 for details.

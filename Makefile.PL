@@ -1,6 +1,6 @@
 use inc::Module::Install;
 
-name 'MySQL-MasterHA-Node';
+name 'mha4mysql-node';
 
 version_from 'lib/MHA/NodeConst.pm';
 

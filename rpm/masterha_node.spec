@@ -1,5 +1,5 @@
-Summary: MySQL-MasterHA-Node Perl module
-Name: MySQL-MasterHA-Node
+Summary: Master High Availability Manager and Tools for MySQL, Node Package
+Name: mha4mysql-node
 Version: 0.51
 Release: 0
 License: GPL v2
@@ -11,13 +11,13 @@ BuildArch: noarch
 BuildRequires: perl(ExtUtils::MakeMaker) >= 6.42
 Requires: perl(DBD::mysql)
 Requires: perl(DBI)
-Source0: MySQL-MasterHA-Node-%{version}.tar.gz
+Source0: mha4mysql-node-%{version}.tar.gz
 
 %description
 %{summary}.
 
 %prep
-%setup -q -n MySQL-MasterHA-Node-%{version}
+%setup -q -n mha4mysql-node-%{version}
 
 %build
 CFLAGS="$RPM_OPT_FLAGS" %{__perl} Makefile.PL INSTALLDIRS="vendor" INSTALLVENDORLIB=/usr/lib/perl5/vendor_perl
