@@ -1,6 +1,6 @@
 Summary: Master High Availability Manager and Tools for MySQL, Node Package
 Name: mha4mysql-node
-Version: 0.51
+Version: 0.52
 Release: 0
 License: GPL v2
 Vendor: DeNA Co.,Ltd.
