@@ -92,7 +92,9 @@ sub main {
       my $binlog_dir =
         MHA::BinlogManager::find_correct_binlog_dir( $opt{start_file},
         $opt{binlog_dir} );
-      croak "Binlog not found from $opt{binlog_dir}!\n" unless ($binlog_dir);
+      croak
+"Binlog not found from $opt{binlog_dir}! If you got this error at MHA Manager, please set \"master_binlog_dir=/path/to/binlog_directory_of_the_master\" correctly in the MHA Manager's configuration file and try again.\n"
+        unless ($binlog_dir);
       $_binlog_manager->init_from_dir_file( $binlog_dir, $opt{start_file} );
     }
 
