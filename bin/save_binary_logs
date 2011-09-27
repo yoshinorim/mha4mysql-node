@@ -37,6 +37,7 @@ GetOptions(
     start_pos=i
     binlog_dir=s
     output_file=s
+    datadir=s
     relay_log_info=s
     oldest_version=s
     handle_raw_binlog=i
@@ -45,6 +46,11 @@ GetOptions(
     debug
     /,
 ) or pod2usage(1);
+
+# for compatibility
+unless ( $opt{datadir} ) {
+  $opt{datadir} = $opt{binlog_dir};
+}
 $opt{binlog_dir} ||= "/var/lib/mysql";
 $opt{handle_raw_binlog} = 1 if ( !defined( $opt{handle_raw_binlog} ) );
 $opt{disable_log_bin}   = 0 if ( !defined( $opt{disable_log_bin} ) );
@@ -86,7 +92,8 @@ sub main {
 
     # Finding target binary/relay log directory
     if ( $opt{relay_log_info} ) {
-      $_binlog_manager->init_from_relay_log_info( $opt{relay_log_info} );
+      $_binlog_manager->init_from_relay_log_info( $opt{relay_log_info},
+        $opt{datadir} );
     }
     else {
       my $binlog_dir =

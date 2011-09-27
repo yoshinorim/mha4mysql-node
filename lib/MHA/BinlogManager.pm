@@ -149,11 +149,12 @@ sub init_from_dir_file($$$) {
     if ( !defined $self->{end_num} );
 }
 
-sub init_from_relay_log_info($$) {
+sub init_from_relay_log_info($$$) {
   my $self = shift;
   $self->{relay_log_info} = shift;
+  my $datadir = shift;
   ( $self->{dir}, $self->{end_log}, $self->{cur_log} ) =
-    get_relaydir_and_files_from_rinfo( $self->{relay_log_info} );
+    get_relaydir_and_files_from_rinfo( $self->{relay_log_info}, $datadir );
   croak "Failed to get relay log directory!\n" unless ( $self->{dir} );
   croak "Failed to get relay log end file!\n"  unless ( $self->{end_log} );
   open_test("$self->{dir}/$self->{end_log}");
@@ -185,8 +186,9 @@ sub mysqlbinlog_ge_50 {
 }
 
 # Return: "/var/lib/mysql" "mysqld-relay-bin.000040"
-sub get_relaydir_and_filename_from_rinfo($) {
+sub get_relaydir_and_filename_from_rinfo($$) {
   my $relay_log_info_path = shift;
+  my $datadir             = shift;
   my $fh;
   if ( !open( $fh, "<", $relay_log_info_path ) ) {
     croak "Could not open relay-log-info file $relay_log_info_path.\n";
@@ -201,26 +203,23 @@ sub get_relaydir_and_filename_from_rinfo($) {
     chomp($current_relay_log_file);
   }
   my $relay_dir = dirname($current_relay_log_file);
-  my $datadir   = dirname($relay_log_info_path);
+
+  # for compatibility
+  unless ($datadir) {
+    $datadir = dirname($relay_log_info_path);
+  }
   if ( !$current_relay_log_file || !$relay_dir ) {
     croak "Coundln't get current relay log name.\n";
   }
 
   unless ( $current_relay_log_file =~ m/^\// ) {
     $current_relay_log_file =~ s/^\.\///;
+    $datadir                =~ s/\/$//;
     $current_relay_log_file = $datadir . "/" . $current_relay_log_file;
     $relay_dir              = $datadir;
-    $relay_dir =~ s/\/$//;
   }
   my $relay_log_basename = basename($current_relay_log_file);
   return $relay_dir, $relay_log_basename;
-}
-
-sub get_relaydir_from_rinfo($) {
-  my $rinfo = shift;
-  my ( $relay_dir, $relay_log_file ) =
-    get_relaydir_and_filename_from_rinfo($rinfo);
-  return $relay_dir;
 }
 
 sub get_head_and_number($) {
@@ -330,9 +329,10 @@ sub should_suppress_row_format {
 
 # dir, read_file, exec_file
 sub get_relaydir_and_files_from_rinfo {
-  my $rinfo = shift;
+  my $rinfo   = shift;
+  my $datadir = shift;
   my ( $relay_dir, $exec_relay_file ) =
-    get_relaydir_and_filename_from_rinfo($rinfo);
+    get_relaydir_and_filename_from_rinfo( $rinfo, $datadir );
   my $end_relay_file = get_end_binlog( $exec_relay_file, $relay_dir );
   return ( $relay_dir, $end_relay_file, $exec_relay_file );
 }

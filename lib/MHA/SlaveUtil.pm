@@ -120,7 +120,14 @@ sub get_relay_log_info_path {
   if ( !defined($filename) ) {
     $filename = "relay-log.info";
   }
-  $relay_log_info_path = $datadir . $filename;
+  unless ( $filename =~ m/^\// ) {
+    $filename =~ s/^\.\///;
+    $datadir  =~ s/\/$//;
+    $relay_log_info_path = $datadir . "/" . $filename;
+  }
+  else {
+    $relay_log_info_path = $filename;
+  }
   return $relay_log_info_path;
 }
 

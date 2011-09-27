@@ -39,6 +39,7 @@ GetOptions(
     help
     version
     command=s
+    datadir=s
     relay_log_info=s
     relay_dir=s
     current_relay_log=s
@@ -80,6 +81,11 @@ $opt{workdir}     ||= "/var/tmp";
 $opt{timestamp}   ||= "0";
 $opt{handle_raw_binlog} = 1 if ( !defined( $opt{handle_raw_binlog} ) );
 $opt{disable_log_bin}   = 0 if ( !defined( $opt{disable_log_bin} ) );
+
+# for compatibility
+unless ( $opt{datadir} ) {
+  $opt{datadir} = $opt{relay_dir};
+}
 
 my $_binlog_manager;
 my $_find_logname_only = 0;
@@ -271,7 +277,8 @@ sub check_set_relay_dir_endlog {
   }
   elsif ( $opt{relay_log_info} ) {
     print "    Opening $opt{relay_log_info} ...";
-    $_binlog_manager->init_from_relay_log_info( $opt{relay_log_info} );
+    $_binlog_manager->init_from_relay_log_info( $opt{relay_log_info},
+      $opt{datadir} );
     print " ok.\n";
   }
   else {
