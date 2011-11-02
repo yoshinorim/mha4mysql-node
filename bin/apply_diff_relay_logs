@@ -200,6 +200,23 @@ sub do_generate($$$) {
   return $rc;
 }
 
+sub use_binary_mode() {
+  my $v = `mysql --version`;
+  my $mysqlclient_version;
+  chomp($v);
+  if ( $v =~ /Distrib (\d+\.\d+\.\d+)/ ) {
+    $mysqlclient_version = $1;
+  }
+  if ( $mysqlclient_version
+    && MHA::NodeUtil::mysql_version_ge( $mysqlclient_version, "5.6.3" ) )
+  {
+    print
+      "MySQL client version is $mysqlclient_version. Using --binary-mode.\n";
+    return "--binary-mode";
+  }
+  return "";
+}
+
 sub apply_diff($$) {
   my $apply_files = shift;
   my $err_file    = shift;
@@ -237,8 +254,10 @@ sub apply_diff($$) {
   }
   return 0 if ( $opt{no_apply} );
 
+  my $binary_mode = use_binary_mode();
+
   $command .=
-" | mysql --user=$opt{slave_user} --password=$opt{slave_pass} --host=$opt{slave_ip} --port=$opt{slave_port} -vvv --unbuffered > $err_file 2>&1";
+" | mysql $binary_mode --user=$opt{slave_user} --password=$opt{slave_pass} --host=$opt{slave_ip} --port=$opt{slave_port} -vvv --unbuffered > $err_file 2>&1";
 
   # applying relay log
   print
