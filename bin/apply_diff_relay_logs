@@ -45,6 +45,7 @@ GetOptions(
     current_relay_log=s
     scp_user=s
     scp_host=s
+    scp_port=i
     slave_user=s
     slave_pass=s
     slave_host=s
@@ -70,6 +71,7 @@ GetOptions(
 ) or pod2usage(1);
 $opt{command}    ||= "";
 $opt{scp_user}   ||= "root";
+$opt{scp_port}   ||= 22;
 $opt{slave_user} ||= "root";
 $opt{slave_pass} ||= "";
 
@@ -361,10 +363,14 @@ sub check() {
   if ( !$opt{scp_user} || !$opt{scp_host} ) {
     return 0;
   }
-  print "    Testing connecting to remote slave $opt{scp_host} via ssh..";
+  print
+"    Testing connecting to remote slave $opt{scp_host}($opt{scp_port}) via ssh..";
   my $ssh_user_host = $opt{scp_user} . '@' . $opt{scp_host};
-  if ( $rc =
-    system("ssh $MHA::NodeConst::SSH_OPT_ALIVE $ssh_user_host \"exit 0 \"") )
+  if (
+    $rc = system(
+"ssh $MHA::NodeConst::SSH_OPT_ALIVE -p $opt{scp_port} $ssh_user_host \"exit 0 \""
+    )
+    )
   {
     my ( $high, $low ) = MHA::NodeUtil::system_rc($rc);
     croak "ssh failed with rc $high:$low!\n";
@@ -403,7 +409,7 @@ sub generate_and_send {
   my $scp_user_host = $opt{scp_user} . '@' . $opt{scp_host};
   if (
     $rc = system(
-"ssh $MHA::NodeConst::SSH_OPT_ALIVE $scp_user_host \"mkdir -p $gen_file_dir\""
+"ssh $MHA::NodeConst::SSH_OPT_ALIVE $scp_user_host -p $opt{scp_port} \"mkdir -p $gen_file_dir\""
     )
     )
   {
@@ -413,18 +419,19 @@ sub generate_and_send {
   }
   if (
     MHA::NodeUtil::file_copy(
-      1,                            $opt{diff_file_readtolatest},
-      $opt{diff_file_readtolatest}, $opt{scp_user},
-      $opt{scp_host}
+      1,
+      $opt{diff_file_readtolatest},
+      $opt{diff_file_readtolatest},
+      $opt{scp_user}, $opt{scp_host}, undef, $opt{scp_port}
     )
     )
   {
-    croak "ERROR: scp %s:%s to %s failed!\n", hostname(),
-      $opt{diff_file_readtolatest}, $scp_user_host;
+    croak "ERROR: scp %s:%s to %s(%d) failed!\n", hostname(),
+      $opt{diff_file_readtolatest}, $scp_user_host, $opt{scp_port};
   }
   else {
-    printf " scp %s:%s to %s succeeded.\n", hostname(),
-      $opt{diff_file_readtolatest}, $scp_user_host;
+    printf " scp %s:%s to %s(%d) succeeded.\n", hostname(),
+      $opt{diff_file_readtolatest}, $scp_user_host, $opt{scp_port};
   }
   return 0;
 

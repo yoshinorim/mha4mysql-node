@@ -49,11 +49,13 @@ sub create_dir_if($) {
 }
 
 # Compare file checksum between local and remote host
-sub compare_checksum($$$$) {
+sub compare_checksum {
   my $local_file  = shift;
   my $remote_path = shift;
   my $ssh_user    = shift;
   my $ssh_host    = shift;
+  my $ssh_port    = shift;
+  $ssh_port = 22 unless ($ssh_port);
 
   my $local_md5 = `md5sum $local_file`;
   return 1 if ($?);
@@ -61,7 +63,7 @@ sub compare_checksum($$$$) {
   $local_md5 = substr( $local_md5, 0, 32 );
   my $ssh_user_host = $ssh_user . '@' . $ssh_host;
   my $remote_md5 =
-    `ssh $MHA::NodeConst::SSH_OPT_ALIVE $ssh_user_host \"md5sum $remote_path\"`;
+`ssh $MHA::NodeConst::SSH_OPT_ALIVE -p $ssh_port $ssh_user_host \"md5sum $remote_path\"`;
   return 1 if ($?);
   chomp($remote_md5);
   $remote_md5 = substr( $remote_md5, 0, 32 );
@@ -76,6 +78,8 @@ sub file_copy {
   my $ssh_user    = shift;
   my $ssh_host    = shift;
   my $log_output  = shift;
+  my $ssh_port    = shift;
+  $ssh_port = 22 unless ($ssh_port);
 
   my $ssh_user_host = $ssh_user . '@' . $ssh_host;
   my ( $from, $to );
@@ -88,17 +92,22 @@ sub file_copy {
     $from = "$ssh_user_host:$remote_file";
   }
 
-  my $max_retries  = 3;
-  my $retry_count  = 0;
-  my $copy_fail    = 1;
-  my $copy_command = "scp $MHA::NodeConst::SSH_OPT_ALIVE $from $to";
+  my $max_retries = 3;
+  my $retry_count = 0;
+  my $copy_fail   = 1;
+  my $copy_command =
+    "scp $MHA::NodeConst::SSH_OPT_ALIVE -P $ssh_port $from $to";
   if ($log_output) {
     $copy_command .= " >> $log_output 2>&1";
   }
 
   while ( $retry_count < $max_retries ) {
-    if ( system($copy_command)
-      || compare_checksum( $local_file, $remote_file, $ssh_user, $ssh_host ) )
+    if (
+      system($copy_command)
+      || compare_checksum(
+        $local_file, $remote_file, $ssh_user, $ssh_host, $ssh_port
+      )
+      )
     {
       my $msg = "Failed copy or checksum. Retrying..";
       if ($log_output) {
