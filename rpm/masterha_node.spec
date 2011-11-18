@@ -1,7 +1,7 @@
 Summary: Master High Availability Manager and Tools for MySQL, Node Package
 Name: mha4mysql-node
 Version: 0.52
-Release: 0
+Release: 0%{?dist}
 License: GPL v2
 Vendor: DeNA Co.,Ltd.
 Group: Utilities
@@ -20,7 +20,7 @@ Source0: mha4mysql-node-%{version}.tar.gz
 %setup -q -n mha4mysql-node-%{version}
 
 %build
-CFLAGS="$RPM_OPT_FLAGS" %{__perl} Makefile.PL INSTALLDIRS="vendor" INSTALLVENDORLIB=/usr/lib/perl5/vendor_perl
+CFLAGS="$RPM_OPT_FLAGS" %{__perl} Makefile.PL INSTALLDIRS="vendor" INSTALLVENDORLIB=%{?perl_install_vendor_lib}
 make %{?_smp_mflags} OPTIMIZE="$RPM_OPT_FLAGS"
 
 %install
