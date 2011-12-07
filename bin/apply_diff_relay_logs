@@ -46,6 +46,7 @@ GetOptions(
     scp_user=s
     scp_host=s
     scp_port=i
+    ssh_options=s
     slave_user=s
     slave_pass=s
     slave_host=s
@@ -87,6 +88,10 @@ $opt{disable_log_bin}   = 0 if ( !defined( $opt{disable_log_bin} ) );
 # for compatibility
 unless ( $opt{datadir} ) {
   $opt{datadir} = $opt{relay_dir};
+}
+
+if ( $opt{ssh_options} ) {
+  $MHA::NodeConst::SSH_OPT_ALIVE = $opt{ssh_options};
 }
 
 my $_binlog_manager;
