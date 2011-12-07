@@ -35,6 +35,7 @@ GetOptions(
     command=s
     start_file=s
     start_pos=i
+    binlog_prefix=s
     binlog_dir=s
     output_file=s
     datadir=s
@@ -76,7 +77,13 @@ sub main {
     unless ( $opt{command} ) {
       croak "Set --command=[test|save]\n";
     }
-    unless ( $opt{start_file} ) {
+    if ( $opt{command} eq "test" ) {
+      if ( !$opt{start_file} && !$opt{binlog_prefix} ) {
+        croak
+"Set --start_file=<starting_binlog_filename> or --binlog_prefix=<binlog_file_prefix>\n";
+      }
+    }
+    elsif ( !$opt{start_file} ) {
       croak "Set --start_file=<starting_binlog_filename>\n";
     }
     if ( !defined( $opt{start_pos} ) ) {
@@ -96,15 +103,22 @@ sub main {
         $opt{datadir} );
     }
     else {
-      my $binlog_dir =
-        MHA::BinlogManager::find_correct_binlog_dir( $opt{start_file},
-        $opt{binlog_dir} );
+      my $binlog_dir;
+      if ( $opt{start_file} ) {
+        $binlog_dir =
+          MHA::BinlogManager::find_correct_binlog_dir( $opt{start_file},
+          $opt{binlog_dir} );
+      }
+      else {
+        ( $binlog_dir, $opt{start_file} ) =
+          MHA::BinlogManager::find_correct_binlog_dir_file_from_prefix(
+          $opt{binlog_prefix}, $opt{binlog_dir} );
+      }
       croak
 "Binlog not found from $opt{binlog_dir}! If you got this error at MHA Manager, please set \"master_binlog_dir=/path/to/binlog_directory_of_the_master\" correctly in the MHA Manager's configuration file and try again.\n"
         unless ($binlog_dir);
       $_binlog_manager->init_from_dir_file( $binlog_dir, $opt{start_file} );
     }
-
     unless ( $opt{output_file} ) {
       croak "Set --output_file=<output_file_path>\n";
     }
