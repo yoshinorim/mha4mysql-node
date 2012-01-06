@@ -240,6 +240,16 @@ sub find_correct_binlog_dir($$) {
   }
 }
 
+sub find_correct_binlog_dir_file_from_prefix($$) {
+  my $binlog_prefix    = shift;
+  my $binlog_dirs      = shift;
+  my @binlog_dir_array = split( /,/, $binlog_dirs );
+  foreach (@binlog_dir_array) {
+    my @files = get_all_binlogs_from_prefix( $binlog_prefix, $_ );
+    return ( $_, $files[0] ) if ( $#files >= 0 );
+  }
+}
+
 sub get_all_binlogs_from_prefix($$) {
   my $binlog_prefix = shift;
   my $binlog_dir    = shift;
