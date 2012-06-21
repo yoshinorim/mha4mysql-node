@@ -22,7 +22,7 @@ use warnings FATAL => 'all';
 
 package MHA::NodeConst;
 
-our $VERSION         = '0.53';
+our $VERSION         = '0.54';
 our $MGR_MIN_VERSION = '0.21';
 our $SSH_OPT_ALIVE =
 "-o ServerAliveInterval=60 -o ServerAliveCountMax=20 -o StrictHostKeyChecking=no -o ConnectionAttempts=5 -o PasswordAuthentication=no";
