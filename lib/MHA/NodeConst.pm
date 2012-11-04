@@ -25,7 +25,7 @@ package MHA::NodeConst;
 our $VERSION         = '0.54';
 our $MGR_MIN_VERSION = '0.21';
 our $SSH_OPT_ALIVE =
-"-o ServerAliveInterval=60 -o ServerAliveCountMax=20 -o StrictHostKeyChecking=no -o ConnectionAttempts=5 -o PasswordAuthentication=no";
+"-o ServerAliveInterval=60 -o ServerAliveCountMax=20 -o StrictHostKeyChecking=no -o ConnectionAttempts=5 -o PasswordAuthentication=no -o BatchMode=yes";
 
 # apply_diff_relay_logs status codes
 our $Target_Has_Received_All_Relay_Logs = 2;
