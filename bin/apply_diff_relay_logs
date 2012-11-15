@@ -96,6 +96,8 @@ if ( $opt{ssh_options} ) {
 
 my $_binlog_manager;
 my $_find_logname_only = 0;
+my $_escaped_slave_user;
+my $_escaped_slave_pass;
 
 $| = 1;
 
@@ -108,6 +110,21 @@ if ( $opt{version} ) {
 }
 
 exit &main();
+
+sub escape_for_mysql {
+  my $str = shift;
+  unless ($str) {
+    return $str;
+  }
+  $str = MHA::NodeUtil::unescape_for_shell($str);
+  $str = MHA::NodeUtil::escape_for_mysql_command($str);
+  return $str;
+}
+
+sub escape_mysql_account {
+  $_escaped_slave_user = escape_for_mysql( $opt{slave_user} );
+  $_escaped_slave_pass = escape_for_mysql( $opt{slave_pass} );
+}
 
 sub fast_find_pos() {
   my %status = ();
@@ -262,9 +279,10 @@ sub apply_diff($$) {
   return 0 if ( $opt{no_apply} );
 
   my $binary_mode = use_binary_mode();
+  escape_mysql_account();
 
   $command .=
-" | mysql $binary_mode --user=$opt{slave_user} --password=$opt{slave_pass} --host=$opt{slave_ip} --port=$opt{slave_port} -vvv --unbuffered > $err_file 2>&1";
+" | mysql $binary_mode --user=$_escaped_slave_user --password=$_escaped_slave_pass --host=$opt{slave_ip} --port=$opt{slave_port} -vvv --unbuffered > $err_file 2>&1";
 
   # applying relay log
   print
@@ -337,10 +355,11 @@ sub check() {
 "    Temporary relay log file is $_binlog_manager->{dir}/$_binlog_manager->{end_log}\n";
   print "    Testing mysql connection and privileges..";
   check_slave_host();
+  escape_mysql_account();
 
   if (
     $rc = system(
-"mysql --user=$opt{slave_user} --password=$opt{slave_pass} --host=$opt{slave_ip} --port=$opt{slave_port} -e \"set sql_log_bin=0; create table if not exists mysql.apply_diff_relay_logs_test(id int); insert into mysql.apply_diff_relay_logs_test values(1); update mysql.apply_diff_relay_logs_test set id=id+1 where id=1; delete from mysql.apply_diff_relay_logs_test; drop table mysql.apply_diff_relay_logs_test;\""
+"mysql --user=$_escaped_slave_user --password=$_escaped_slave_pass --host=$opt{slave_ip} --port=$opt{slave_port} -e \"set sql_log_bin=0; create table if not exists mysql.apply_diff_relay_logs_test(id int); insert into mysql.apply_diff_relay_logs_test values(1); update mysql.apply_diff_relay_logs_test set id=id+1 where id=1; delete from mysql.apply_diff_relay_logs_test; drop table mysql.apply_diff_relay_logs_test;\""
     )
     )
   {

@@ -200,4 +200,64 @@ sub mysql_version_ge {
   return $result;
 }
 
+my @shell_escape_chars = (
+  '"', '!', '#', '&', ';', '`', '|',    '*',
+  '?', '~', '<', '>', '^', '(', ')',    '[',
+  ']', '{', '}', '$', ',', ' ', '\x0A', '\xFF'
+);
+
+sub unescape_for_shell {
+  my $str = shift;
+  if ( !index( $str, '\\\\' ) ) {
+    return $str;
+  }
+  foreach my $c (@shell_escape_chars) {
+    my $x       = quotemeta($c);
+    my $pattern = "\\\\(" . $x . ")";
+    $str =~ s/$pattern/$1/g;
+  }
+  return $str;
+}
+
+sub escape_for_shell {
+  my $str = shift;
+  my $ret = "";
+  foreach my $c ( split //, $str ) {
+    my $x      = $c;
+    my $escape = 0;
+    foreach my $e (@shell_escape_chars) {
+      if ( $e eq $x ) {
+        $escape = 1;
+        last;
+      }
+    }
+    if ( $x eq "'" ) {
+      $x =~ s/'/'\\''/;
+    }
+    if ( $x eq "\\" ) {
+      $x = "\\\\";
+    }
+    if ($escape) {
+      $x = "\\" . $x;
+    }
+    $ret .= "$x";
+  }
+  $ret = "'" . $ret . "'";
+  return $ret;
+}
+
+sub escape_for_mysql_command {
+  my $str = shift;
+  my $ret = "";
+  foreach my $c ( split //, $str ) {
+    my $x = $c;
+    if ( $x eq "'" ) {
+      $x =~ s/'/'\\''/;
+    }
+    $ret .= $x;
+  }
+  $ret = "'" . $ret . "'";
+  return $ret;
+}
+
 1;
