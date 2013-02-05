@@ -122,7 +122,7 @@ sub get_relay_log_info_path {
   }
   unless ( $filename =~ m/^\// ) {
     $filename =~ s/^\.\///;
-    $datadir  =~ s/\/$//;
+    $datadir =~ s/\/$//;
     $relay_log_info_path = $datadir . "/" . $filename;
   }
   else {

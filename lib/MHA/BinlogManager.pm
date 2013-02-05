@@ -92,8 +92,7 @@ sub die_if_too_old_version {
 sub init_mysqlbinlog($) {
   my $self = shift;
   eval {
-    unless ( $self->{mysql_version} )
-    {
+    unless ( $self->{mysql_version} ) {
       croak "mysql version not found.\n";
     }
     my $v = `mysqlbinlog --version`;
@@ -214,7 +213,7 @@ sub get_relaydir_and_filename_from_rinfo($$) {
 
   unless ( $current_relay_log_file =~ m/^\// ) {
     $current_relay_log_file =~ s/^\.\///;
-    $datadir                =~ s/\/$//;
+    $datadir =~ s/\/$//;
     $current_relay_log_file = $datadir . "/" . $current_relay_log_file;
     $relay_dir              = $datadir;
   }

@@ -64,8 +64,7 @@ exit &main();
 sub main {
   my $exit_code = 1;
   eval {
-    if ( $opt{help} )
-    {
+    if ( $opt{help} ) {
       pod2usage(0);
     }
     if ( $opt{version} ) {
