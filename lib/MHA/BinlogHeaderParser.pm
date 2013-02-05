@@ -45,6 +45,7 @@ sub new {
     binlog_size                => undef,
     has_real_rotate_event      => 0,
     has_real_init_rotate_event => 0,
+    has_checksum_algo          => 0,
     debug                      => 0,
     @_,
   };
@@ -123,23 +124,36 @@ sub unpack_header_util {
   return ( $event_type, $server_id, $event_length, $end_log_pos );
 }
 
-sub get_master_version_from_fde($$) {
-  my $self = shift;
-  my $pos  = shift;
-  my $fp   = $self->{fp};
-  my ( $event_type, $server_id, $b, $c ) = $self->unpack_header($pos);
+sub get_server_version_from_fde($$) {
+  my $self      = shift;
+  my $pos       = shift;
+  my $is_master = shift;
+  my $server_version;
+  my $fp = $self->{fp};
+  my ( $event_type, $server_id, $event_length, $c ) =
+    $self->unpack_header($pos);
   if ( $event_type == $FORMAT_DESCRIPTION_EVENT ) {
     seek( $fp, $pos + 21, 0 );
-    read( $fp, $self->{master_version}, 50 );
-    $self->{master_version} =~ s/\0//g;
-    print " Master Version is $self->{master_version}\n";
+    read( $fp, $server_version, 50 );
+    $server_version =~ s/\0//g;
+    print " Master Version is $server_version\n" if ($is_master);
+    if ( MHA::NodeUtil::mysql_version_ge( $server_version, "5.6.0" ) ) {
+      seek( $fp, $pos + $event_length - 5, 0 );
+      read( $fp, $self->{checksum_algo}, 1 );
+      if ( $self->{checksum_algo} ) {
+        print " Binlog Checksum enabled\n";
+      }
+    }
+    if ($is_master) {
+      $self->{master_version} = $server_version;
+    }
   }
   else {
     croak
       "This is not format description event! ev type=$event_type, pos=$pos.\n";
   }
   seek( $fp, $pos, 0 );
-  return $self->{master_version};
+  return $server_version;
 }
 
 sub parse_master_rotate_event($$) {
@@ -160,7 +174,12 @@ sub parse_master_rotate_event($$) {
       read( $fp, $rotate_pos, $header_len );
       $end_log_pos = unpack( 'V', $rotate_pos );
       seek( $fp, $pos + $offset + $header_len, 0 );
-      read( $fp, $self->{current_mlf}, $event_length - $offset - $header_len );
+      my $read_length = $event_length - $offset - $header_len;
+
+      if ( $self->{checksum_algo} ) {
+        $read_length -= 4;
+      }
+      read( $fp, $self->{current_mlf}, $read_length );
       $self->{has_real_rotate_event} = 1;
       $self->{has_real_init_rotate_event} = 1 if ( $end_log_pos <= 4 );
       print
@@ -210,8 +229,11 @@ sub parse_init_headers {
         $self->{starting_mlp} = $end_log_pos
           if ( !$self->{starting_mlp} && $end_log_pos > 0 );
         if ( !$self->{master_version} ) {
-          $self->get_master_version_from_fde( $self->{prev_pos} );
+          $self->get_server_version_from_fde( $self->{prev_pos}, 1 );
         }
+      }
+      else {
+        $self->get_server_version_from_fde( $self->{prev_pos}, 0 );
       }
     }
     elsif ( $event_type == $ROTATE_EVENT ) {
