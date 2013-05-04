@@ -44,6 +44,8 @@ GetOptions(
     handle_raw_binlog=i
     disable_log_bin=i
     manager_version=s
+    client_bindir=s
+    client_libdir=s
     debug
     /,
 ) or pod2usage(1);
@@ -92,6 +94,8 @@ sub main {
       handle_raw_binlog => $opt{handle_raw_binlog},
       disable_log_bin   => $opt{disable_log_bin},
       mysql_version     => $opt{oldest_version},
+      client_bindir     => $opt{client_bindir},
+      client_libdir     => $opt{client_libdir},
       debug             => $opt{debug},
     );
     $_binlog_manager->init_mysqlbinlog() unless ( $opt{handle_raw_binlog} );
