@@ -96,8 +96,11 @@ if ( $opt{ssh_options} ) {
   $MHA::NodeConst::SSH_OPT_ALIVE = $opt{ssh_options};
 }
 
-my $_mysql = MHA::NodeUtil::client_cli_prefix("mysql", $opt{client_bindir}, $opt{client_libdir});
-my $_mysqlbinlog = MHA::NodeUtil::client_cli_prefix("mysqlbinlog", $opt{client_bindir}, $opt{client_libdir});
+my $_mysql = MHA::NodeUtil::client_cli_prefix( "mysql", $opt{client_bindir},
+  $opt{client_libdir} );
+my $_mysqlbinlog =
+  MHA::NodeUtil::client_cli_prefix( "mysqlbinlog", $opt{client_bindir},
+  $opt{client_libdir} );
 
 my $_binlog_manager;
 my $_find_logname_only = 0;

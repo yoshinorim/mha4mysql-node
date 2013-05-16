@@ -261,11 +261,11 @@ sub escape_for_mysql_command {
 }
 
 sub client_cli_prefix {
-  my ($exe, $bindir, $libdir) = @_;
+  my ( $exe, $bindir, $libdir ) = @_;
   croak "unexpected client binary $exe\n" unless $exe =~ /^mysql(?:binlog)?$/;
   my %env = ( LD_LIBRARY_PATH => $libdir );
-  my $cli     = $exe;
-  if ( $bindir ) {
+  my $cli = $exe;
+  if ($bindir) {
     if ( ref $bindir eq "ARRAY" ) {
       $env{'PATH'} = $bindir;
     }
@@ -273,15 +273,18 @@ sub client_cli_prefix {
       $cli = escape_for_shell("$bindir/$exe");
     }
   }
-  for my $k (keys %env) {
+  for my $k ( keys %env ) {
     if ( my $v = $env{$k} ) {
-      my @dirs = ref $v eq "ARRAY" ? @{$v} : ( ref $v eq "" ? ($v) : ( ) ) ;
+      my @dirs = ref $v eq "ARRAY" ? @{$v} : ( ref $v eq "" ? ($v) : () );
       @dirs = grep { $_ && !/:/ } @dirs;
-      if ( @dirs ) {
-         $cli = "$k=" . join(":", ( map { escape_for_shell($_) } @dirs ), "\$$k") . " $cli";
+      if (@dirs) {
+        $cli = "$k="
+          . join( ":", ( map { escape_for_shell($_) } @dirs ), "\$$k" )
+          . " $cli";
       }
     }
   }
+
   # $cli .= " --no-defaults";
   return $cli;
 }

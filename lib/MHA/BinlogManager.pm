@@ -62,8 +62,7 @@ sub get_apply_arg($) {
   my $arg  = "";
   if (
     should_suppress_row_format(
-      $self->{mysqlbinlog_version},
-      $self->{mysql_version},
+      $self->{mysqlbinlog_version}, $self->{mysql_version},
       $self->{mysqlbinlog}
     )
     )
@@ -105,7 +104,7 @@ sub init_mysqlbinlog($) {
       croak "mysql version not found.\n";
     }
     my $v = `$self->{mysqlbinlog} --version`;
-    my ($high,$low) = MHA::NodeUtil::system_rc($?);
+    my ( $high, $low ) = MHA::NodeUtil::system_rc($?);
     if ( $high || $low ) {
       croak "$self->{mysqlbinlog} version command failed with rc $high:$low, "
         . "please verify PATH, LD_LIBRARY_PATH, and client options\n";
@@ -116,7 +115,8 @@ sub init_mysqlbinlog($) {
     }
     croak "$self->{mysqlbinlog} version not found!\n"
       unless ( $self->{mysqlbinlog_version} );
-    die_if_too_old_version( $self->{mysqlbinlog_version}, $self->{mysqlbinlog} );
+    die_if_too_old_version( $self->{mysqlbinlog_version},
+      $self->{mysqlbinlog} );
     if ( !mysqlbinlog_ge_51( $self->{mysqlbinlog_version} ) ) {
       print
 "$self->{mysqlbinlog} version is $self->{mysqlbinlog_version} (included in MySQL Client 5.0 or lower). This is not recommended. Consider upgrading MySQL Client to 5.1 or higher.\n";
@@ -553,7 +553,8 @@ sub concat_all_binlogs_from($$$$) {
   my $suppress_row_format;
   if ( !$handle_raw_binlog ) {
     $suppress_row_format =
-      should_suppress_row_format( $mysqlbinlog_version, $mysql_version, $self->{mysqlbinlog} );
+      should_suppress_row_format( $mysqlbinlog_version, $mysql_version,
+      $self->{mysqlbinlog} );
   }
   print
 " Concat binary/relay logs from $binlog_prefix.$start_num pos $start_pos to $binlog_prefix.$end_num EOF into $outfile ..\n";
