@@ -43,18 +43,21 @@ GetOptions(
     host=s
     port=i
     disable_relay_log_purge
+    use_hardlink=i
     /,
 ) or pod2usage(1);
-$opt{workdir}  ||= "/var/tmp";
-$opt{user}     ||= "root";
-$opt{password} ||= "";
-$opt{host}     ||= "127.0.0.1";
-$opt{port}     ||= 3306;
+$opt{workdir}      ||= "/var/tmp";
+$opt{user}         ||= "root";
+$opt{password}     ||= "";
+$opt{host}         ||= "127.0.0.1";
+$opt{port}         ||= 3306;
+$opt{use_hardlink} ||= 1;
 
 $| = 1;
 
 my $_binlog_manager;
-my $_relay_log_info_path = $opt{relay_log_info};
+my $_relay_log_info_path   = $opt{relay_log_info};
+my @relay_log_files_handle = ();
 
 if ( $opt{help} ) {
   pod2usage(0);
@@ -66,6 +69,18 @@ if ( $opt{version} ) {
 }
 
 exit &main();
+
+sub open_relay_logs() {
+  my $relay_dir = $_binlog_manager->{dir};
+  my @files =
+    MHA::BinlogManager::get_all_binlogs_from_prefix( $_binlog_manager->{prefix},
+    $relay_dir );
+  foreach my $relay_log_basename (@files) {
+    print(" Opening $relay_dir/$relay_log_basename ..\n");
+    open( my $fh, "<", "$relay_dir/$relay_log_basename" ) or croak $!;
+    push @relay_log_files_handle, $fh;
+  }
+}
 
 sub hardlink_relay_logs($) {
   my $current_relay_log = shift;
@@ -204,9 +219,13 @@ sub main {
       $current_relay_log = $_binlog_manager->{cur_log};
     }
 
-    remove_hardlinked_relay_logs();
-
-    croak if ( hardlink_relay_logs($current_relay_log) );
+    if ( $opt{use_hard_link} ) {
+      remove_hardlinked_relay_logs();
+      croak if ( hardlink_relay_logs($current_relay_log) );
+    }
+    else {
+      open_relay_logs();
+    }
 
     if ( MHA::SlaveUtil::get_failover_advisory_lock( $dbh, 200 ) ) {
       croak
@@ -219,7 +238,9 @@ sub main {
     print " ok.\n";
 
     MHA::SlaveUtil::release_failover_advisory_lock($dbh);
-    remove_hardlinked_relay_logs();
+    if ( $opt{use_hard_link} ) {
+      remove_hardlinked_relay_logs();
+    }
     my $end = MHA::NodeUtil::current_time();
     printf("$end: All relay log purging operations succeeded.\n");
     $exit_code = 0;
