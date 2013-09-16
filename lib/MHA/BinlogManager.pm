@@ -510,7 +510,17 @@ sub dump_mysqlbinlog($$$$$$) {
   my $disable_log_bin     = $self->{disable_log_bin};
 
   my $rc;
-
+  my $binlog_file = "$binlog_dir/$from_file";
+  my $file_size   = -s $binlog_file;
+  if ( $from_pos > 4 && $from_pos > $file_size ) {
+    print
+"Target file $binlog_file size=$file_size, this is smaller than exec pos $from_pos. Skipping.\n";
+    return 1;
+  }
+  elsif ( $from_pos > 4 && $from_pos == $file_size ) {
+    print "No additional binlog events found.\n";
+    return 1;
+  }
   my $command =
     "echo \"# Binary/Relay log file $from_file started\" >> $out_diff_file";
   system($command);
@@ -523,9 +533,15 @@ sub dump_mysqlbinlog($$$$$$) {
     $command .= " --disable-log-bin";
   }
 
-  $command .= " $binlog_dir/$from_file";
-  $command .= "| filter_mysqlbinlog";
+  $command .= " $binlog_file";
+  if ( !$self->{skip_filter} ) {
+    $command .= "| filter_mysqlbinlog";
+  }
   $command .= " >> $out_diff_file";
+  if ( $self->{debug} ) {
+    print "Executing command: $command\n";
+  }
+
   $rc = system($command);
   if ($rc) {
     my ( $high, $low ) = MHA::NodeUtil::system_rc($rc);
@@ -578,8 +594,12 @@ sub concat_all_binlogs_from($$$$) {
         $first_file );
     }
     else {
-      $self->dump_mysqlbinlog( $self->{dir}, $from_file, $from_pos, $outfile,
-        $suppress_row_format );
+      my $rc =
+        $self->dump_mysqlbinlog( $self->{dir}, $from_file, $from_pos,
+        $outfile, $suppress_row_format );
+      if ($rc) {
+        return $rc;
+      }
     }
   }
   if ( -f $outfile ) {
