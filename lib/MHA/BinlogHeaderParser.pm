@@ -56,6 +56,7 @@ our $ROTATE_EVENT                 = 4;
 our $FORMAT_DESCRIPTION_EVENT     = 15;
 our $XID_EVENT                    = 16;
 our $LOG_EVENT_MINIMAL_HEADER_LEN = 19;
+our $PREVIOUS_GTIDS_LOG_EVENT     = 35;
 our $MAX_ALLOWED_PACKET           = 1024 * 1024 * 1024;
 
 sub open_binlog($) {
@@ -187,12 +188,12 @@ sub parse_master_rotate_event($$) {
       $self->{has_real_rotate_event} = 1;
       $self->{has_real_init_rotate_event} = 1 if ( $end_log_pos <= 4 );
       print
-"parse_master_rotate_event(real rotate event): file=$self->{file} event_type=$event_type server_id=$server_id length=$event_length elp=$end_log_pos\n"
+" parse_master_rotate_event(real rotate event): file=$self->{file} event_type=$event_type server_id=$server_id length=$event_length current mlf=$self->{current_mlf} elp=$end_log_pos\n"
         if ( $self->{debug} );
     }
     else {
       print
-"parse_master_rotate_event(non-real rotate event): file=$self->{file} event_type=$event_type server_id=$server_id length=$event_length elp=$end_log_pos\n"
+" parse_master_rotate_event(non-real rotate event): file=$self->{file} event_type=$event_type server_id=$server_id length=$event_length elp=$end_log_pos\n"
         if ( $self->{debug} );
     }
   }
@@ -256,6 +257,10 @@ sub parse_init_headers {
         print $out $buf;
         close($out);
       }
+    }
+    elsif ( $event_type == $PREVIOUS_GTIDS_LOG_EVENT ) {
+      print " Got previous gtids log event: $self->{current_pos}.\n"
+        if ( $self->{debug} );
     }
     else {
       return $self->{prev_pos};
