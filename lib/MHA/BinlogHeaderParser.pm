@@ -140,8 +140,12 @@ sub get_server_version_from_fde($$) {
     if ( MHA::NodeUtil::mysql_version_ge( $server_version, "5.6.0" ) ) {
       seek( $fp, $pos + $event_length - 5, 0 );
       read( $fp, $self->{checksum_algo}, 1 );
-      if ( $self->{checksum_algo} ) {
+      if ( $self->{checksum_algo} ne "\0" ) {
         print " Binlog Checksum enabled\n";
+        $self->{checksum_algo} = 1;
+      }
+      else {
+        $self->{checksum_algo} = 0;
       }
     }
     if ($is_master) {
