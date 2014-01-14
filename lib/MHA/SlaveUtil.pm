@@ -74,10 +74,11 @@ sub get_relay_log_info_type {
   my $dbh           = shift;
   my $mysql_version = shift;
   $mysql_version = get_version($dbh) unless ($mysql_version);
-  if ( !MHA::NodeUtil::mysql_version_ge( $mysql_version, "5.6.0" ) ) {
-    return "FILE";
-  }
   my $type = get_variable( $dbh, Get_Relay_Log_Info_Type_SQL );
+  unless (defined($type))
+  {
+  	$type = "FILE";
+  }
   return $type;
 }
 
