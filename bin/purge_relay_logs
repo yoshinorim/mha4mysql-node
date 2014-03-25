@@ -42,6 +42,7 @@ GetOptions(
     password=s
     host=s
     port=i
+    socket=s
     disable_relay_log_purge
     use_hardlink=i
     /,
@@ -174,6 +175,9 @@ sub main {
 
     $_binlog_manager = new MHA::BinlogManager();
     my $dsn = "DBI:mysql:;host=$opt{host};port=$opt{port}";
+    if ( defined($opt{socket} ) ) {
+      $dsn .= ";mysql_socket=$opt{socket}";
+    }
     my $dbh =
       DBI->connect( $dsn, $opt{user}, $opt{password},
       { PrintError => 0, RaiseError => 1 } );
