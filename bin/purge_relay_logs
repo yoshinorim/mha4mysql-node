@@ -179,7 +179,7 @@ sub main {
     if ( defined( $opt{socket} ) ) {
       $dsn .= ";mysql_socket=$opt{socket}";
     }
-    if ( defined($opt{defaults_file} ) ) {
+    if ( defined( $opt{defaults_file} ) ) {
       $dsn .= ";mysql_read_default_file=$opt{defaults_file}";
     }
     my $dbh =
