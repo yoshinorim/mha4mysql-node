@@ -43,6 +43,7 @@ GetOptions(
     host=s
     port=i
     socket=s
+    defaults_file=s
     disable_relay_log_purge
     use_hardlink=i
     /,
@@ -177,6 +178,9 @@ sub main {
     my $dsn = "DBI:mysql:;host=$opt{host};port=$opt{port}";
     if ( defined( $opt{socket} ) ) {
       $dsn .= ";mysql_socket=$opt{socket}";
+    }
+    if ( defined($opt{defaults_file} ) ) {
+      $dsn .= ";mysql_read_default_file=$opt{defaults_file}";
     }
     my $dbh =
       DBI->connect( $dsn, $opt{user}, $opt{password},
