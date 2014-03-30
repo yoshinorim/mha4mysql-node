@@ -376,7 +376,8 @@ sub check() {
   }
   print " done.\n";
   print "    Testing mysqlbinlog output..";
-  my $workfile = "$opt{workdir}/slavediff_tmp_$opt{slave_host}_$opt{slave_port}.log";
+  my $workfile =
+    "$opt{workdir}/slavediff_tmp_$opt{slave_host}_$opt{slave_port}.log";
 
   if (
     $rc = system(

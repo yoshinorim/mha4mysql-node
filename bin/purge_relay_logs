@@ -175,7 +175,7 @@ sub main {
 
     $_binlog_manager = new MHA::BinlogManager();
     my $dsn = "DBI:mysql:;host=$opt{host};port=$opt{port}";
-    if ( defined($opt{socket} ) ) {
+    if ( defined( $opt{socket} ) ) {
       $dsn .= ";mysql_socket=$opt{socket}";
     }
     my $dbh =
