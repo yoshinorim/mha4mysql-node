@@ -34,6 +34,7 @@ GetOptions(
     version
     workdir=s
     holder=s
+    lease=i
     unlock
     debug
     /,
@@ -52,6 +53,7 @@ exit &main();
 sub main() {
     my $exit_code = 1;
     my $workdir = $opt{workdir};
+    my $expired_time = time() + 3600;
     unless ($workdir) {
         croak "Paxos lock failed. workdir is not specified.\n";
     }
@@ -61,30 +63,47 @@ sub main() {
     unless ($opt{holder}) {
         croak "Paxos lock failed. holder is not specified.\n";
     }
+    if ($opt{lease}) {
+        $expired_time = time() + $opt{lease};
+    }
     my $lock_file = "$workdir/paxos_lock";
     unless ($opt{unlock}) {
         unless (sysopen(LOCK_FILE, $lock_file, O_CREAT | O_EXCL | O_WRONLY)) {
-            open(LOCK_FILE, $lock_file);
-            my $exist_holder = <LOCK_FILE>;
-            close LOCK_FILE;
-            if ($exist_holder eq $opt{holder}) {
-                print "Paxos locked again successfully(holder: $exist_holder).\n";
-                $exit_code = 0;
-                return $exit_code;
+            if (sysopen(LOCK_FILE, $lock_file, O_EXCL | O_RDWR)) {
+                my ($exist_holder, $exist_expired_time) = split(/:/, <LOCK_FILE>);
+                my ($now) = time();
+                if (($exist_holder eq $opt{holder}) &&
+                    ($exist_expired_time && (($exist_expired_time + 0) > $now))) {
+                    close LOCK_FILE;
+                    print "Paxos locked again successfully(holder: $exist_holder).\n";
+                    $exit_code = 0;
+                    return $exit_code;
+                }
+                if ($exist_expired_time && (($exist_expired_time + 0) < $now)) {
+                    # fallthrough
+                } else {
+                    close LOCK_FILE;
+                    croak "Paxos lock failed. $lock_file exist and not expired(holder: $exist_holder expired_time: $exist_expired_time now: $now).\n";
+                }
+            } else {
+                croak "Paxos lock failed. $lock_file exist and open failed.\n";
             }
-            croak "Paxos lock failed. $lock_file exist(holder: $exist_holder).\n";
         }
-        print LOCK_FILE $opt{holder};
+        seek LOCK_FILE,0,0;
+        truncate LOCK_FILE,0;
+        print LOCK_FILE "$opt{holder}:$expired_time";
         close LOCK_FILE;
         open(LOCK_FILE, $lock_file) or croak "Read after paxos lock failed.\n";
-        my $read_holder = <LOCK_FILE>;
+        my ($read_holder, $read_expired_time) = split(/:/, <LOCK_FILE>);
         close LOCK_FILE;
-        if ($read_holder eq $opt{holder}) {
+        my ($now) = time();
+        if (($read_holder eq $opt{holder}) &&
+            ($read_expired_time && (($read_expired_time + 0) > $now))) {
             print "Paxos locked first time successfully(holder: $read_holder).\n";
             $exit_code = 0;
             return $exit_code;
         }
-        croak "Compare after paxos lock failed, It's strange(holder: $read_holder).\n";
+        croak "Compare after paxos lock failed, It's strange(holder: $read_holder read_expired_time: $read_expired_time now: $now).\n";
     } else {
         unless (-f $lock_file) {
             print "Paxos unlocked successfully. Lock file not exists.\n";
@@ -98,9 +117,11 @@ sub main() {
         }
         link $lock_file,$link_filename;
         open(READ_FILE, $lock_file);
-        my $exist_holder = <READ_FILE>;
+        my ($exist_holder, $exist_expired_time) = split(/:/, <READ_FILE>);
         close READ_FILE;
-        if ($exist_holder eq $opt{holder}) {
+        my ($now) = time();
+        if (($exist_holder eq $opt{holder}) ||
+            ($exist_expired_time && (($exist_expired_time + 0) < $now))) {
             unlink $link_filename;
             unlink $lock_file;
             print "Paxos unlocked successfully.\n";
@@ -108,6 +129,6 @@ sub main() {
             return $exit_code;
         }
         unlink $link_filename;
-        croak "Paxos unlock failed, It's strange(holder: $exist_holder).\n";
+        croak "Paxos unlock failed, It's strange(holder: $exist_holder expired: $exist_expired_time now: $now).\n";
     }
 }
