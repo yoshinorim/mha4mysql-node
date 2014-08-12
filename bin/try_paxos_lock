@@ -53,7 +53,7 @@ exit &main();
 sub main() {
     my $exit_code = 1;
     my $workdir = $opt{workdir};
-    my $expired_time = time() + 3600;
+    my $expired_time = time() + 86400;
     unless ($workdir) {
         croak "Paxos lock failed. workdir is not specified.\n";
     }
