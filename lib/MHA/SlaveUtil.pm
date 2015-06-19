@@ -75,7 +75,7 @@ sub get_relay_log_info_type {
   my $mysql_version = shift;
   my $type;
   $mysql_version = get_version($dbh) unless ($mysql_version);
-  if ( MHA::NodeUtil::mysql_version_ge( $mysql_version, "5.6.2" ) ) {
+  if ( !is_mariadb($mysql_version) && MHA::NodeUtil::mysql_version_ge( $mysql_version, "5.6.2" ) ) {
     $type = get_variable( $dbh, Get_Relay_Log_Info_Type_SQL );
   }
   unless ( defined($type) ) {
@@ -165,6 +165,15 @@ sub is_slave($) {
     return 0;
   }
   return 1;
+}
+
+sub is_mariadb($) {
+  my $version_str   = shift;
+  if ($version_str =~ m/.*MariaDB.*/i)
+  {
+    return 1;
+  }
+  return 0;
 }
 
 sub get_advisory_lock_internal($$$) {
