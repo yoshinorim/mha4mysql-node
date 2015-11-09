@@ -26,7 +26,7 @@ use Carp qw(croak);
 use MHA::NodeConst;
 use File::Path;
 use Errno();
-use Socket qw(getaddrinfo getnameinfo);
+use Socket qw(NI_NUMERICHOST getaddrinfo getnameinfo);
 
 sub create_dir_if($) {
   my $dir = shift;
@@ -157,7 +157,7 @@ sub get_ip {
     croak "Failed to get IP address on host $host: $err\n" if $err;
 
     # We take the first ip address that is returned by getaddrinfo
-    ( $err, $addr_host ) = getnameinfo($bin_addr_host[0]->{addr});
+    ( $err, $addr_host ) = getnameinfo($bin_addr_host[0]->{addr}, NI_NUMERICHOST);
     croak "Failed to convert IP address for host $host: $err\n" if $err;
 
     return $addr_host;
