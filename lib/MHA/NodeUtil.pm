@@ -26,6 +26,7 @@ use Carp qw(croak);
 use MHA::NodeConst;
 use File::Path;
 use Errno();
+use Socket qw(getaddrinfo getnameinfo);
 
 sub create_dir_if($) {
   my $dir = shift;
@@ -150,13 +151,15 @@ sub drop_file_if($) {
 
 sub get_ip {
   my $host = shift;
-  my ( $bin_addr_host, $addr_host );
+  my ( $err, @bin_addr_host, $addr_host );
   if ( defined($host) ) {
-    $bin_addr_host = gethostbyname($host);
-    unless ($bin_addr_host) {
-      croak "Failed to get IP address on host $host!\n";
-    }
-    $addr_host = sprintf( "%vd", $bin_addr_host );
+    ( $err, @bin_addr_host ) = getaddrinfo($host);
+    croak "Failed to get IP address on host $host: $err\n" if $err;
+
+    # We take the first ip address that is returned by getaddrinfo
+    ( $err, $addr_host ) = getnameinfo($bin_addr_host[0]->{addr});
+    croak "Failed to convert IP address for host $host: $err\n" if $err;
+
     return $addr_host;
   }
   return;
