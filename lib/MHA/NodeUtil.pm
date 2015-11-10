@@ -86,11 +86,11 @@ sub file_copy {
   my ( $from, $to );
   if ($to_remote) {
     $from = $local_file;
-    $to   = "$ssh_user_host:$remote_file";
+    $to   = "[$ssh_user_host]:$remote_file";
   }
   else {
     $to   = $local_file;
-    $from = "$ssh_user_host:$remote_file";
+    $from = "[$ssh_user_host]:$remote_file";
   }
 
   my $max_retries = 3;
@@ -159,6 +159,14 @@ sub get_ip {
     # We take the first ip address that is returned by getaddrinfo
     ( $err, $addr_host ) = getnameinfo($bin_addr_host[0]->{addr}, NI_NUMERICHOST);
     croak "Failed to convert IP address for host $host: $err\n" if $err;
+
+    # for IPv6 (and it works with IPv4 and hostnames as well):
+    # - DBD-MySQL expects [::] format
+    # - scp requires [::] format
+    # - ssh requires :: format
+    # - mysql tools require :: format
+    # The code in MHA is expected to use [] when it is running scp
+    # when it connects with DBD-MySQL
 
     return $addr_host;
   }
