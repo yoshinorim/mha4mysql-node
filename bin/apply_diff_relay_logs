@@ -367,7 +367,7 @@ sub check() {
 
   if (
     $rc = system(
-"$_mysql --user=$_escaped_slave_user --password=$_escaped_slave_pass --host=$opt{slave_ip} --port=$opt{slave_port} -e \"set sql_log_bin=0; create table if not exists mysql.apply_diff_relay_logs_test(id int) engine myisam; insert into mysql.apply_diff_relay_logs_test values(1); update mysql.apply_diff_relay_logs_test set id=id+1 where id=1; delete from mysql.apply_diff_relay_logs_test; drop table mysql.apply_diff_relay_logs_test;\""
+"$_mysql --user=$_escaped_slave_user --password=$_escaped_slave_pass --host=$opt{slave_ip} --port=$opt{slave_port} -e \"set sql_log_bin=0; create table if not exists mysql.apply_diff_relay_logs_test(id int); insert into mysql.apply_diff_relay_logs_test values(1); update mysql.apply_diff_relay_logs_test set id=id+1 where id=1; delete from mysql.apply_diff_relay_logs_test; drop table mysql.apply_diff_relay_logs_test;\""
     )
     )
   {
