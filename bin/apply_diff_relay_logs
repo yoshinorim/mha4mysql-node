@@ -28,6 +28,7 @@ use MHA::BinlogPosFinderXid;
 use MHA::BinlogPosFinderElp;
 use MHA::NodeConst;
 use MHA::NodeUtil;
+use DBI;
 use Getopt::Long;
 use Pod::Usage;
 use File::Basename;
@@ -289,6 +290,13 @@ sub apply_diff($$) {
   my $binary_mode = use_binary_mode();
   escape_mysql_account();
 
+  my ($super_read_only_enabled, $dbh) = 
+          check_if_super_read_only($opt{slave_host}, $opt{slave_ip}, $opt{slave_port}, $opt{slave_user}, $opt{slave_pass});
+
+  if ($super_read_only_enabled) {
+    disable_super_read_only($dbh);
+  }
+
   $command .=
 " | $_mysql $binary_mode --user=$_escaped_slave_user --password=$_escaped_slave_pass --host=$opt{slave_ip} --port=$opt{slave_port} -vvv --unbuffered > $err_file 2>&1";
 
@@ -303,7 +311,14 @@ sub apply_diff($$) {
     printf( "Error logs from %s:%s (the last 200 lines)..\n",
       hostname(), $err_file );
     system("tail -200 $err_file");
+
+    if ($super_read_only_enabled) {
+      enable_super_read_only($dbh);
+    }
     return $MHA::NodeConst::Applying_SQL_File_Failed;
+  }
+  if ($super_read_only_enabled) {
+    enable_super_read_only($dbh);
   }
   return 0;
 }
@@ -320,6 +335,41 @@ sub apply {
   return apply_diff( $opt{apply_files},
     "$opt{workdir}/relay_log_apply_for_$opt{slave_host}_$opt{slave_port}_$date"
       . "_err.log" );
+}
+
+sub check_if_super_read_only {
+  my $host = shift;
+  my $ip = shift;
+  my $port = shift;
+  my $user = shift;
+  my $pass = shift;
+  # create databasehandle to check super_read_only setting
+  my $dsn = "DBI:mysql:;host=[$ip];port=$port";
+  my $dbh =
+    DBI->connect( $dsn, $user, MHA::NodeUtil::unescape_for_shell($pass),
+    { PrintError => 0, RaiseError => 1 } );
+  croak "Failed to get DB Handle to check super_read_only on $host:$port!\n" unless ($dbh);
+
+  my $sth = $dbh->prepare("SELECT \@\@global.super_read_only as Value");
+  $sth->execute();
+  my $href = $sth->fetchrow_hashref;
+  if ( $href->{Value} == '1' ) {
+    return (1, $dbh);
+  }
+  return (0, 0);
+}
+
+sub disable_super_read_only {
+  my $dbh = shift;
+  print "disabling super_read_only, enabling read_only, so that the applying can be done on the slave\n";
+  $dbh->do("SET GLOBAL super_read_only=off;");
+  $dbh->do("SET GLOBAL read_only=on;");
+}
+
+sub enable_super_read_only {
+  my $dbh = shift;
+  print "enabling super_read_only again after applying\n";
+  $dbh->do("SET GLOBAL super_read_only=on;");
 }
 
 sub check_set_relay_dir_endlog {
@@ -361,7 +411,19 @@ sub check() {
   check_set_relay_dir_endlog();
   print
 "    Temporary relay log file is $_binlog_manager->{dir}/$_binlog_manager->{end_log}\n";
-  print "    Testing mysql connection and privileges..";
+
+  print "    Checking if super_read_only is defined and turned on..";
+  my ($super_read_only_enabled, $dbh) = 
+          check_if_super_read_only($opt{slave_host}, $opt{slave_ip}, $opt{slave_port}, $opt{slave_user}, $opt{slave_pass});
+  if ($super_read_only_enabled) {
+    print " enabled: ";
+    disable_super_read_only($dbh);
+    print "\n";
+  } else {
+    print " not present or turned off, ignoring.\n";
+  }
+
+  print "    Testing mysql connection and privileges..\n";
   check_slave_host();
   escape_mysql_account();
 
@@ -371,10 +433,22 @@ sub check() {
     )
     )
   {
+    if ($super_read_only_enabled) {
+      enable_super_read_only($dbh);
+    }
+
     my ( $high, $low ) = MHA::NodeUtil::system_rc($rc);
     croak "mysql command failed with rc $high:$low!\n";
   }
+
   print " done.\n";
+
+  if ($super_read_only_enabled) {
+    print "    Enabling super_read_only again defined and turned on..";
+    enable_super_read_only($dbh);
+  }
+
+
   print "    Testing mysqlbinlog output..";
   my $workfile =
     "$opt{workdir}/slavediff_tmp_$opt{slave_host}_$opt{slave_port}.log";
