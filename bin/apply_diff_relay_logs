@@ -416,9 +416,7 @@ sub check() {
   my ($super_read_only_enabled, $dbh) = 
           check_if_super_read_only($opt{slave_host}, $opt{slave_ip}, $opt{slave_port}, $opt{slave_user}, $opt{slave_pass});
   if ($super_read_only_enabled) {
-    print " enabled: ";
     disable_super_read_only($dbh);
-    print "\n";
   } else {
     print " not present or turned off, ignoring.\n";
   }
@@ -444,7 +442,7 @@ sub check() {
   print " done.\n";
 
   if ($super_read_only_enabled) {
-    print "    Enabling super_read_only again defined and turned on..";
+    print "    Enabling super_read_only again..";
     enable_super_read_only($dbh);
   }
 
