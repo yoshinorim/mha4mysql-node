@@ -82,15 +82,15 @@ sub file_copy {
   my $ssh_port    = shift;
   $ssh_port = 22 unless ($ssh_port);
 
-  my $ssh_user_host = $ssh_user . '@' . $ssh_host;
+  my $ssh_user_host = $ssh_user . '@[' . $ssh_host . ']';
   my ( $from, $to );
   if ($to_remote) {
     $from = $local_file;
-    $to   = "[$ssh_user_host]:$remote_file";
+    $to   = "$ssh_user_host:$remote_file";
   }
   else {
     $to   = $local_file;
-    $from = "[$ssh_user_host]:$remote_file";
+    $from = "$ssh_user_host:$remote_file";
   }
 
   my $max_retries = 3;
