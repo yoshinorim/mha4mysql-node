@@ -459,11 +459,11 @@ sub generate_and_send {
     )
     )
   {
-    croak "ERROR: scp %s:%s to %s(%d) failed!\n", hostname(),
+    croak "ERROR: scp [%s]:%s to %s(%d) failed!\n", hostname(),
       $opt{diff_file_readtolatest}, $scp_user_host, $opt{scp_port};
   }
   else {
-    printf " scp %s:%s to %s(%d) succeeded.\n", hostname(),
+    printf " scp [%s]:%s to %s(%d) succeeded.\n", hostname(),
       $opt{diff_file_readtolatest}, $scp_user_host, $opt{scp_port};
   }
   return 0;
