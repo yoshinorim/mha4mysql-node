@@ -175,7 +175,7 @@ sub main {
     print "$start: purge_relay_logs script started.\n";
 
     $_binlog_manager = new MHA::BinlogManager();
-    my $dsn = "DBI:mysql:;host=[$opt{host}];port=$opt{port}";
+    my $dsn = "DBI:mysql:;host=$opt{host};port=$opt{port}";
     if ( defined( $opt{socket} ) ) {
       $dsn .= ";mysql_socket=$opt{socket}";
     }
