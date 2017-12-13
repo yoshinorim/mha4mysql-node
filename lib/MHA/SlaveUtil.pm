@@ -22,6 +22,7 @@ package MHA::SlaveUtil;
 use strict;
 use warnings FATAL => 'all';
 
+use Carp;
 use English qw(-no_match_vars);
 use File::Basename;
 use MHA::NodeUtil;
@@ -224,6 +225,53 @@ sub get_monitor_advisory_lock {
 sub release_monitor_advisory_lock($) {
   my $dbh = shift;
   return release_advisory_lock_internal( $dbh, Release_Monitor_Lock_SQL );
+}
+
+sub check_if_super_read_only {
+  my $host = shift;
+  my $ip = shift;
+  my $port = shift;
+  my $user = shift;
+  my $pass = shift;
+  # create databasehandle to check super_read_only setting
+  my $dsn = "DBI:mysql:;host=[$ip];port=$port";
+  my $dbh =
+    DBI->connect( $dsn, $user, MHA::NodeUtil::unescape_for_shell($pass),
+    { PrintError => 0, RaiseError => 1 } );
+  croak "Failed to get DB Handle to check super_read_only on $host:$port!\n" unless ($dbh);
+
+  my $sth = $dbh->prepare("SELECT \@\@global.super_read_only as Value");
+  $sth->execute();
+  my $href = $sth->fetchrow_hashref;
+  if ( $href->{Value} == '1' ) {
+    return (1, $dbh);
+  }
+  return (0, 0);
+}
+
+sub disable_super_read_only {
+  my $dbh = shift;
+  my $log = shift;
+  my $message = "Disabling super_read_only, enabling read_only, so that the applying can be done on the slave\n";
+  if ( $log ) {
+    $log->info($message);
+  } else {
+    print $message;
+  }
+  $dbh->do("SET GLOBAL super_read_only=off;");
+  $dbh->do("SET GLOBAL read_only=on;");
+}
+
+sub enable_super_read_only {
+  my $dbh = shift;
+  my $log = shift;
+  my $message = "Enabling super_read_only again after applying\n";
+  if ( $log ) {
+    $log->info($message);
+  } else {
+    print $message;
+  }
+  $dbh->do("SET GLOBAL super_read_only=on;");
 }
 
 1;
