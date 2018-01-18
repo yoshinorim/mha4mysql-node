@@ -234,7 +234,8 @@ sub check_if_super_read_only {
   my $user = shift;
   my $pass = shift;
   # create databasehandle to check super_read_only setting
-  my $dsn = "DBI:mysql:;host=[$ip];port=$port";
+  my $dsn_host = $ip =~ m{:} ? '[' . $ip . ']' : $ip;
+  my $dsn = "DBI:mysql:;host=$dsn_host;port=$port";
   my $dbh =
     DBI->connect( $dsn, $user, MHA::NodeUtil::unescape_for_shell($pass),
     { PrintError => 0, RaiseError => 1 } );
