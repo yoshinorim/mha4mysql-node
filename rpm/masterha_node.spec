@@ -9,7 +9,7 @@ URL: http://code.google.com/p/mysql-master-ha/
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
 BuildArch: noarch
 BuildRequires: perl(ExtUtils::MakeMaker) >= 6.30
-Requires: perl(DBD::mysql) >= 4.031
+Requires: perl(DBD::mysql)
 Requires: perl(DBI)
 Source0: mha4mysql-node-%{version}.tar.gz
 
