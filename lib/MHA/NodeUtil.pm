@@ -81,8 +81,8 @@ sub file_copy {
   my $log_output  = shift;
   my $ssh_port    = shift;
   $ssh_port = 22 unless ($ssh_port);
-
-  my $ssh_user_host = $ssh_user . '@[' . $ssh_host . ']';
+  my $dsn_host = $ssh_host =~ m{:} ? '[' . $ssh_host . ']' : $ssh_host;
+  my $ssh_user_host = $ssh_user . '@' . $dsn_host;
   my ( $from, $to );
   if ($to_remote) {
     $from = $local_file;

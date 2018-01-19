@@ -9,5 +9,5 @@ Homepage: http://code.google.com/p/mysql-master-ha/
 
 Package: mha4mysql-node
 Architecture: all
-Depends: ${misc:Depends}, ${perl:Depends}, libdbi-perl, libdbd-mysql-perl (>= 4.031)
+Depends: ${misc:Depends}, ${perl:Depends}, libdbi-perl, libdbd-mysql-perl
 Description: Master High Availability Manager and Tools for MySQL, Node Package
