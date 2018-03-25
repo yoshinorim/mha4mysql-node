@@ -198,7 +198,9 @@ sub parse_mysql_version($) {
 
 sub parse_mysql_major_version($) {
   my $str = shift;
-  my $result = sprintf( '%03d%03d', $str =~ m/(\d+)/g );
+  $str =~ /(\d+)\.(\d+)/;
+  my $strmajor = "$1.$2";
+  my $result = sprintf( '%03d%03d', $strmajor =~ m/(\d+)/g );
   return $result;
 }
 
