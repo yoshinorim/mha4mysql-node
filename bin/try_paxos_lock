@@ -1,0 +1,134 @@
+#!/usr/bin/env perl
+
+#  Copyright (C) 2011 DeNA Co.,Ltd.
+#
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation; either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#   along with this program; if not, write to the Free Software
+#  Foundation, Inc.,
+#  51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+
+use strict;
+use warnings FATAL => 'all';
+use Carp qw(croak);
+use MHA::NodeConst;
+use MHA::NodeUtil;
+use Getopt::Long;
+use Pod::Usage;
+use Fcntl;
+
+$| = 1;
+
+GetOptions(
+  \my %opt, qw/
+  help
+  version
+  workdir=s
+  holder=s
+  lease=i
+  unlock
+  debug
+  /,
+) or pod2usage(1);
+
+if ( $opt{help} ) {
+  pod2usage(0);
+}
+if ( $opt{version} ) {
+  print "try_paxos_lock version $MHA::NodeConst::VERSION.\n";
+  exit 0;
+}
+
+exit &main();
+
+sub main() {
+  my $exit_code = 1;
+  my $workdir = $opt{workdir};
+  my $expired_time = time() + 86400;
+  unless ($workdir) {
+    croak "Paxos lock failed. workdir is not specified.\n";
+  }
+  unless (-d $workdir) {
+    croak "Paxos lock failed. Work directory does not exists(directory: $workdir).\n";
+  }
+  unless ($opt{holder}) {
+    croak "Paxos lock failed. holder is not specified.\n";
+  }
+  if ($opt{lease}) {
+    $expired_time = time() + $opt{lease};
+  }
+  my $lock_file = "$workdir/paxos_lock";
+  unless ($opt{unlock}) {
+    unless (sysopen(LOCK_FILE, $lock_file, O_CREAT | O_EXCL | O_WRONLY)) {
+      if (sysopen(LOCK_FILE, $lock_file, O_EXCL | O_RDWR)) {
+        my ($exist_holder, $exist_expired_time) = split(/:/, <LOCK_FILE>);
+        my ($now) = time();
+        if (($exist_holder eq $opt{holder}) &&
+          ($exist_expired_time && (($exist_expired_time + 0) > $now))) {
+          close LOCK_FILE;
+          print "Paxos locked again successfully(holder: $exist_holder).\n";
+          $exit_code = 0;
+          return $exit_code;
+        }
+        if ($exist_expired_time && (($exist_expired_time + 0) < $now)) {
+          # fallthrough
+        } else {
+          close LOCK_FILE;
+          croak "Paxos lock failed. $lock_file exist and not expired(holder: $exist_holder expired_time: $exist_expired_time now: $now).\n";
+        }
+      } else {
+        croak "Paxos lock failed. $lock_file exist and open failed.\n";
+      }
+    }
+    seek LOCK_FILE,0,0;
+    truncate LOCK_FILE,0;
+    print LOCK_FILE "$opt{holder}:$expired_time";
+    close LOCK_FILE;
+    open(LOCK_FILE, $lock_file) or croak "Read after paxos lock failed.\n";
+    my ($read_holder, $read_expired_time) = split(/:/, <LOCK_FILE>);
+    close LOCK_FILE;
+    my ($now) = time();
+    if (($read_holder eq $opt{holder}) &&
+      ($read_expired_time && (($read_expired_time + 0) > $now))) {
+      print "Paxos locked first time successfully(holder: $read_holder).\n";
+      $exit_code = 0;
+      return $exit_code;
+    }
+    croak "Compare after paxos lock failed, It's strange(holder: $read_holder read_expired_time: $read_expired_time now: $now).\n";
+  } else {
+    unless (-f $lock_file) {
+      print "Paxos unlocked successfully. Lock file not exists.\n";
+      $exit_code = 0;
+      return $exit_code;
+    }
+    my $link_filename="/var/tmp/paxos_lock";
+    if (-f $link_filename) {
+      print "Old link file exists,unlink it.\n";
+      unlink $link_filename;
+    }
+    link $lock_file,$link_filename;
+    open(READ_FILE, $lock_file);
+    my ($exist_holder, $exist_expired_time) = split(/:/, <READ_FILE>);
+    close READ_FILE;
+    my ($now) = time();
+    if (($exist_holder eq $opt{holder}) ||
+      ($exist_expired_time && (($exist_expired_time + 0) < $now))) {
+      unlink $link_filename;
+      unlink $lock_file;
+      print "Paxos unlocked successfully.\n";
+      $exit_code = 0;
+      return $exit_code;
+    }
+    unlink $link_filename;
+    croak "Paxos unlock failed, It's strange(holder: $exist_holder expired: $exist_expired_time now: $now).\n";
+  }
+}
