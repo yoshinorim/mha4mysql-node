@@ -192,7 +192,7 @@ sub check_manager_version {
 
 sub parse_mysql_version($) {
   my $str = shift;
-  my $result = sprintf( '%03d%03d%03d', $str =~ m/(\d+)/g );
+  my $result = sprintf( '%03d%03d%03d', ($str =~ m/(\d+)/g)[0 .. 2] );
   return $result;
 }
 
@@ -200,7 +200,7 @@ sub parse_mysql_major_version($) {
   my $str = shift;
   $str =~ /(\d+)\.(\d+)/;
   my $strmajor = "$1.$2";
-  my $result = sprintf( '%03d%03d', $strmajor =~ m/(\d+)/g );
+  my $result = sprintf( '%03d%03d', ($strmajor =~ m/(\d+)/g)[0 .. 2] );
   return $result;
 }
 
