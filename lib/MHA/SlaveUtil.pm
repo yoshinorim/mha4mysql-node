@@ -177,6 +177,15 @@ sub is_mariadb($) {
   return 0;
 }
 
+sub is_perconadb($) {
+  my $version_str   = shift;
+  if ($version_str =~ m/.*Percona.*/i)
+  {
+    return 1;
+  }
+  return 0;
+}
+
 sub get_advisory_lock_internal($$$) {
   my $dbh     = shift;
   my $timeout = shift;
@@ -240,6 +249,13 @@ sub check_if_super_read_only {
     DBI->connect( $dsn, $user, MHA::NodeUtil::unescape_for_shell($pass),
     { PrintError => 0, RaiseError => 1 } );
   croak "Failed to get DB Handle to check super_read_only on $host:$port!\n" unless ($dbh);
+
+  # Added in Percona 5.6.21, standard 5.7.8
+  my $mysql_version = get_version($dbh);
+  my $target_version = is_perconadb($mysql_version) ? "5.6.21" : "5.7.8";
+  if (! MHA::NodeUtil::mysql_version_ge( $mysql_version, $target_version ) ) {
+    return (0, 0);
+  }
 
   my $sth = $dbh->prepare("SELECT \@\@global.super_read_only as Value");
   $sth->execute();
