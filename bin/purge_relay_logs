@@ -139,10 +139,17 @@ sub check_local {
   return if ( $opt{host} eq $my_host );
 
   my $target_addr     = MHA::NodeUtil::get_ip( $opt{host} );
-  my @ifconfig_result = `/sbin/ifconfig -a`;
   my %addrs;
-  for (@ifconfig_result) {
-    if (/\s*inet addr:([\d.]+)/) {
+  my @result;
+
+  if (-e '/sbin/ip' && -x _) {
+    @result = `/sbin/ip -o addr`
+  } else {
+    @result = `/sbin/ifconfig -a`;
+  }
+
+  for (@result) {
+    if (/\s*inet6? (?:addr:)?([^\/\s]+)/) {
       $addrs{$1} = 1;
     }
   }
