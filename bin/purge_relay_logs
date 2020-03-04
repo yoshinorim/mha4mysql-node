@@ -45,7 +45,7 @@ GetOptions(
     socket=s
     defaults_file=s
     disable_relay_log_purge
-    use_hardlink=i
+    use_hard_link=i
     /,
 ) or pod2usage(1);
 $opt{workdir}      ||= "/var/tmp";
@@ -53,7 +53,7 @@ $opt{user}         ||= "root";
 $opt{password}     ||= "";
 $opt{host}         ||= "127.0.0.1";
 $opt{port}         ||= 3306;
-$opt{use_hardlink} ||= 1;
+$opt{use_hard_link} ||= 1;
 
 $| = 1;
 
@@ -106,11 +106,11 @@ sub hardlink_relay_logs($) {
       last;
     }
     print(
-" Creating hard link for $relay_dir/$relay_log_basename under $opt{workdir}/$relay_log_basename .."
+" Creating hard link for $relay_dir/$relay_log_basename under $opt{workdir}/purge_$relay_log_basename .."
     );
     croak
       if system(
-      "ln $relay_dir/$relay_log_basename  $opt{workdir}/$relay_log_basename");
+      "ln $relay_dir/$relay_log_basename  $opt{workdir}/purge_$relay_log_basename");
     print(" ok.\n");
     $archived_num++;
   }
@@ -123,11 +123,11 @@ sub hardlink_relay_logs($) {
 }
 
 sub remove_hardlinked_relay_logs() {
-  print(" Removing hard linked relay log files $_binlog_manager->{prefix}* "
+  print(" Removing hard linked relay log files purge_$_binlog_manager->{prefix}* "
       . "under $opt{workdir}.." );
   croak
     if system(
-"find -L $opt{workdir} -maxdepth 1 -type f -name '$_binlog_manager->{prefix}*' | xargs rm -f"
+"find -L $opt{workdir} -maxdepth 1 -type f -name 'purge_$_binlog_manager->{prefix}*' | xargs rm -f"
     );
   print(" done.\n");
 }
