@@ -39,6 +39,7 @@ use constant Get_Relay_Log_Info_SQL =>
 use constant Is_Relay_Purge_SQL => "SELECT \@\@global.relay_log_purge As Value";
 use constant Show_Log_Error_File_SQL => "SHOW VARIABLES LIKE 'log_error'";
 use constant Show_Slave_Status_SQL   => "SHOW SLAVE STATUS";
+use constant Show_Replica_Status_SQL => "SHOW REPLICA STATUS";
 use constant Disable_Relay_Purge_SQL => "SET GLOBAL relay_log_purge=0";
 use constant Enable_Relay_Purge_SQL  => "SET GLOBAL relay_log_purge=1";
 use constant Flush_Relay_Logs_SQL =>
@@ -76,6 +77,11 @@ sub get_relay_log_info_type {
   my $mysql_version = shift;
   my $type;
   $mysql_version = get_version($dbh) unless ($mysql_version);
+
+  # relay_log_info_repository was removed in 8.3 (always TABLE)
+  if ( !is_mariadb($mysql_version) && MHA::NodeUtil::mysql_version_ge( $mysql_version, "8.3.0" ) ) {
+    return "TABLE";
+  }
   if ( !is_mariadb($mysql_version) && MHA::NodeUtil::mysql_version_ge( $mysql_version, "5.6.2" ) ) {
     $type = get_variable( $dbh, Get_Relay_Log_Info_Type_SQL );
   }
@@ -158,10 +164,16 @@ sub purge_relay_logs($) {
 }
 
 sub is_slave($) {
-  my $dbh   = shift;
-  my $query = Show_Slave_Status_SQL;
-  my $sth   = $dbh->prepare($query);
-  my $ret   = $sth->execute();
+  my $dbh           = shift;
+  my $query         = Show_Slave_Status_SQL;
+  my $mysql_version = get_version($dbh);
+
+  # SHOW SLAVE STATUS was removed in 8.4
+  if ( !is_mariadb($mysql_version) && MHA::NodeUtil::mysql_version_ge( $mysql_version, "8.4.0" ) ) {
+    $query = Show_Replica_Status_SQL;
+  }
+  my $sth = $dbh->prepare($query);
+  my $ret = $sth->execute();
   if ( !defined($ret) || $ret != 1 ) {
     return 0;
   }

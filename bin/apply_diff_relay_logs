@@ -237,7 +237,7 @@ sub use_binary_mode() {
   my $v = `$_mysql --version`;
   my $mysqlclient_version;
   chomp($v);
-  if ( $v =~ /Distrib (\d+\.\d+\.\d+)/ ) {
+  if ( $v =~ /Distrib (\d+\.\d+\.\d+)/ || $v =~ /Ver (\d+\.\d+\.\d+)\S* for/ ) {
     $mysqlclient_version = $1;
   }
   if ( $mysqlclient_version
